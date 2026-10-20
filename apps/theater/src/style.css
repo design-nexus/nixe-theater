@@ -1,0 +1,77 @@
+/* Cinematic content; shared Nixe chrome and Media Player controls retain their styles. */
+.theater-window .page-home,
+.theater-window .page-details { padding: 16px 24px 36px; }
+.theater-window .page-home.narrow,
+.theater-window .page-details.narrow { padding: 12px 16px 32px; }
+.theater-window .theater-hero {
+  border-radius: 10px;
+  background: @theme_video;
+  margin: 8px 0 20px;
+}
+.theater-window .theater-hero-shade {
+  background: linear-gradient(to bottom, alpha(@theme_video, 0.05), alpha(@theme_video, 0.45) 35%, alpha(@theme_video, 0.98));
+}
+.theater-window .theater-hero-content { padding: 24px; }
+.theater-window .theater-hero-content label { color: @theme_on_video; }
+.theater-window .theater-hero-title { font-size: 2.1em; font-weight: 700; }
+.theater-window .theater-eyebrow { font-size: 0.76em; letter-spacing: 2px; opacity: 0.8; }
+.theater-window .theater-hero-meta { font-size: 0.86em; opacity: 0.86; }
+.theater-window .theater-hero-summary { font-size: 0.9em; opacity: 0.85; }
+.theater-window .theater-hero-content button {
+  color: @theme_on_video;
+  background: alpha(@theme_video, 0.8);
+  border: 1px solid alpha(@theme_on_video, 0.25);
+  padding: 6px 14px;
+}
+.theater-window .theater-hero-content button:hover { background: alpha(@theme_on_video, 0.16); }
+.theater-window .theater-hero-content button.suggested-action { background: @theme_on_video; color: @theme_video; }
+.theater-window .theater-hero-content button.suggested-action label,
+.theater-window .theater-hero-content button.suggested-action image { color: @theme_video; }
+.theater-window .theater-detail-info { padding: 8px 0; }
+.theater-window .page-home > box { margin-bottom: 16px; }
+.dialog-card { padding: 24px; }
+.swatch { min-width: 20px; min-height: 20px; border-radius: 4px; }
+.theater-window .theater-hero-home { min-height: 480px; }
+.theater-window .narrow .theater-hero-home { min-height: 400px; }
+.theater-window .theater-hero-home .theater-hero-title { font-size: 2.6em; }
+.theater-window .group-poster {
+  border-radius: 10px;
+  border: 1px solid @hairline;
+  background: linear-gradient(145deg, mix(@theme_bg, @theme_accent, 0.30), mix(@theme_bg, @theme_muted, 0.18));
+  padding: 12px;
+}
+.theater-window .group-poster-monogram { font-size: 3.0em; font-weight: 700; color: @theme_accent; }
+.theater-window .group-poster-kind { font-size: 0.72em; letter-spacing: 2px; color: @theme_dim_text; }
+
+/* Detail hierarchy: compact metadata groups, generous section boundaries. */
+@define-color theater_secondary mix(@theme_text, @theme_dim_text, 0.25);
+.theater-window .page-details .dim,
+.theater-window .page-details .group-title,
+.theater-window .card-meta,
+.theater-window .group-poster-kind { color: @theater_secondary; }
+.theater-window .page-details .theater-prose { font-size: 0.95em; }
+.theater-window .theater-overview { margin: 0 0 24px; }
+.theater-window .theater-source-section { margin: 0 0 28px; }
+.theater-window .theater-content-section { margin: 0 0 32px; }
+.theater-window .theater-content-section > .group-title { margin: 0 0 2px; }
+.theater-window .theater-disclosure { padding: 12px 0; border-top: 1px solid @hairline; }
+.theater-window .theater-disclosure > box { margin-top: 8px; }
+.theater-window .theater-rating-badge { color: @theme_text; }
+.theater-window .theater-rating-score { color: @theme_text; font-size: 1em; font-weight: 700; }
+.theater-window .theater-ratings > flowboxchild { padding: 0; margin: 0; }
+.theater-window .theater-ratings button { padding: 4px 0; border: none; background: transparent; }
+.theater-window .theater-ratings button label { text-decoration: none; }
+.theater-window .theater-ratings button:hover { color: @theme_accent; }
+.theater-window .theater-detail-tags > flowboxchild { padding: 0; }
+.theater-window .page-details .theater-hero-meta { opacity: 1; color: @theater_secondary; }
+.theater-window .page-details .theater-hero-content .theater-hero-meta { color: @theme_on_video; }
+.theater-window .page-details .card-meta { font-size: 0.9em; }
+.theater-window .page-details .theater-prose { color: @theme_text; }
+
+/* Filter card: shared segmented navigation and consistent selection rows. */
+.theater-filter-panel .theater-filter-row { padding: 6px 0; }
+.theater-filter-panel .theater-filter-label { color: @theme_text; }
+.theater-filter-panel .theater-filter-value { color: @theme_text; }
+.theater-filter-panel .theater-filter-picker > button { padding: 6px 10px; }
+.theater-filter-panel .theater-filter-footer { border-top: 1px solid @hairline; padding-top: 16px; }
+.theater-filter-popover checkbutton { padding: 4px 2px; }

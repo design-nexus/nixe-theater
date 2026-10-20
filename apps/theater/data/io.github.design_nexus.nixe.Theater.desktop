@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Theater
+Comment=Movies and shows in one Nixe theater
+Exec=nixe-theater %U
+Icon=io.github.design_nexus.nixe.Theater
+Terminal=false
+Categories=AudioVideo;Video;Player;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;video/ogg;video/x-m4v;
+StartupWMClass=io.github.design_nexus.nixe.Theater

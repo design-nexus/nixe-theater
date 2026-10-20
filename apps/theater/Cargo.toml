@@ -1,0 +1,26 @@
+[package]
+name = "nixe-theater"
+version = "0.1.0"
+description = "A unified Plex and Jellyfin theater for Nixe"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nixe-core = { path = "../../crates/nixe-core" }
+nixe-theme = { path = "../../crates/nixe-theme" }
+nixe-ui = { path = "../../crates/nixe-ui" }
+nixe-playback = { path = "../../crates/nixe-playback" }
+nixe-media-model = { path = "../../crates/nixe-media-model" }
+nixe-media-cache = { path = "../../crates/nixe-media-cache" }
+gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+nixe-plex = { path = "../../crates/nixe-plex" }
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+async-channel = "2"
+nixe-jellyfin = { path = "../../crates/nixe-jellyfin" }
+
+rusqlite = { version = "0.40", features = ["bundled"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+url = "2"
