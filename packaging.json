@@ -1,0 +1,10 @@
+{
+  "application": "theater",
+  "directory": "theater",
+  "packages": [
+    "nixe-theater"
+  ],
+  "manifest": "Cargo.toml",
+  "prepare": [],
+  "binaries": []
+}
