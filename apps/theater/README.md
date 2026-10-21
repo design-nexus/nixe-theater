@@ -16,11 +16,15 @@ This installs mpv, FFmpeg and libsecret if they're missing, builds with Cargo, a
 ## Connecting
 
 - **Plex:** sign in through Plex's web login; Theater finds your account's servers and
-  prefers a local connection. An address and token can be entered by hand instead.
+  prefers a local connection. If the server's address changes later, Theater finds it
+  again through your account. An address and token can be entered by hand instead.
 - **Jellyfin:** the server's address and your account.
-- One server of each kind can be connected at once. Tokens are kept in the desktop keyring
-  (Secret Service), never in settings or caches. Disconnect (in Settings, two clicks)
-  removes the token.
+- One server of each kind can be connected at once. Tokens (and the Plex account token
+  from signing in) are kept in the desktop keyring (Secret Service), never in settings or
+  caches. Disconnect (in Settings, two clicks) removes them.
+- At startup each library fetches only what changed since it was last synced: new and
+  edited titles and watch state. A library is fetched whole when something was removed
+  from it, once a day, and when you press Refresh.
 - Cached titles stay browsable when a server is offline. A library that fails to refresh
   keeps its cached titles while the others update.
 

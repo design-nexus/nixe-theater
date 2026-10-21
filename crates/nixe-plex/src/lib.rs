@@ -203,6 +203,21 @@ impl DiscoveredServer {
     }
 }
 
+/// What `Client::changed_page` asks about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChangeField {
+    Metadata,
+    Watched,
+}
+
+/// Find the server `server_id` through the account again (its address changed, or its
+/// token was replaced) and connect to it: the client and the server's own token.
+pub fn rediscover(client_id: &str, account_token: &Secret, server_id: &str) -> Result<(Client, Secret)> {
+    let servers = discover(client_id, account_token)?;
+    let server = servers.into_iter().find(|s| s.id == server_id).ok_or(ProviderError::Offline)?;
+    server.connect(client_id)
+}
+
 #[derive(Clone)]
 pub struct Client {
     http: Http,
@@ -339,6 +354,16 @@ impl Client {
         self.page_kind(&format!("/library/sections/{}/all", id(library)?), library, cursor, Some("4"))
     }
     fn page_kind(&self, path: &str, library: &str, cursor: Option<&str>, kind: Option<&str>) -> Result<Page<MediaItem>> {
+        self.page_filtered(path, library, cursor, kind, None)
+    }
+    fn page_filtered(
+        &self,
+        path: &str,
+        library: &str,
+        cursor: Option<&str>,
+        kind: Option<&str>,
+        filter: Option<(String, String)>,
+    ) -> Result<Page<MediaItem>> {
         let start: usize = cursor.unwrap_or("0").parse().map_err(|_| ProviderError::InvalidResponse)?;
         let mut query = vec![
             ("X-Plex-Container-Start", start.to_string()),
@@ -348,6 +373,10 @@ impl Client {
         ];
         if let Some(kind) = kind {
             query.push(("type", kind.into()));
+        }
+        let mut query: Vec<(&str, String)> = query;
+        if let Some((key, value)) = &filter {
+            query.push((key.as_str(), value.clone()));
         }
         let v = self.get(path, &query)?;
         let c = &v["MediaContainer"];
@@ -366,6 +395,33 @@ impl Client {
         let end = start.checked_add(raw.len()).ok_or(ProviderError::InvalidResponse)?;
         let more = !raw.is_empty() && c["totalSize"].as_u64().map(|n| (end as u64) < n).unwrap_or(raw.len() >= PAGE_SIZE);
         Ok(Page { items, next: more.then(|| end.to_string()) })
+    }
+    /// Titles of one `kind` (None: the library's own, "3" seasons, "4" episodes) whose
+    /// metadata changed (`field` "updatedAt") or that were watched ("lastViewedAt")
+    /// after `since` (Unix seconds, the server's clock).
+    pub fn changed_page(
+        &self,
+        library: &str,
+        kind: Option<&str>,
+        field: ChangeField,
+        since: i64,
+        cursor: Option<&str>,
+    ) -> Result<Page<MediaItem>> {
+        let key = match field {
+            ChangeField::Metadata => "updatedAt>>",
+            ChangeField::Watched => "lastViewedAt>>",
+        };
+        let path = format!("/library/sections/{}/all", id(library)?);
+        self.page_filtered(&path, library, cursor, kind, Some((key.into(), since.max(0).to_string())))
+    }
+    /// How many titles of one `kind` the library has, as the server counts them.
+    pub fn count(&self, library: &str, kind: Option<&str>) -> Result<u64> {
+        let mut query = vec![("X-Plex-Container-Start", "0".to_string()), ("X-Plex-Container-Size", "0".into())];
+        if let Some(kind) = kind {
+            query.push(("type", kind.into()));
+        }
+        let v = self.get(&format!("/library/sections/{}/all", id(library)?), &query)?;
+        v["MediaContainer"]["totalSize"].as_u64().ok_or(ProviderError::InvalidResponse)
     }
     pub fn library_page(&self, library: &str, cursor: Option<&str>) -> Result<Page<MediaItem>> {
         self.page(&format!("/library/sections/{}/all", id(library)?), library, cursor)
@@ -760,6 +816,59 @@ mod tests {
         "duration":600000,"viewOffset":120000,"editionTitle":"Director's cut", "Guid":[{"id":"tmdb://123"},{"id":"imdb://tt123"}],
         "thumb":"/library/metadata/42/thumb/1", "Media":[{"id":7,"videoCodec":"h264","height":1080,"Part":[{"key":"/library/parts/8/file.mkv"}]},{"id":9,"videoCodec":"hevc","height":2160,"Part":[{"key":"/library/parts/10/file.mkv"}]},
         {"id":11,"videoCodec":"h264","Part":[{"key":"/library/parts/12/first.mkv","duration":300000},{"key":"/library/parts/13/second.mkv","duration":300000}]}]})
+    }
+    #[test]
+    fn changed_pages_filter_on_the_server_and_counts_read_the_total() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            for _ in 0..5 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut first = String::new();
+                reader.read_line(&mut first).unwrap();
+                loop {
+                    let mut line = String::new();
+                    reader.read_line(&mut line).unwrap();
+                    if line == "\r\n" {
+                        break;
+                    }
+                }
+                let uri = Url::parse(&format!("http://fixture{}", first.split_whitespace().nth(1).unwrap())).unwrap();
+                let q: std::collections::HashMap<_, _> = uri.query_pairs().into_owned().collect();
+                let data = match uri.path() {
+                    "/" => serde_json::json!({"MediaContainer":{"machineIdentifier":"fixture-server"}}),
+                    "/library/sections" => serde_json::json!({"MediaContainer":{"Directory":[]}}),
+                    "/library/sections/1/all" if q.get("X-Plex-Container-Size").map(String::as_str) == Some("0") => {
+                        assert_eq!(q["type"], "4");
+                        serde_json::json!({"MediaContainer":{"size":0,"totalSize":12}})
+                    }
+                    "/library/sections/1/all" if q.contains_key("updatedAt>>") => {
+                        assert_eq!(q["updatedAt>>"], "1700000000");
+                        serde_json::json!({"MediaContainer":{"offset":0,"size":1,"totalSize":1,"Metadata":[movie()]}})
+                    }
+                    "/library/sections/1/all" => {
+                        assert_eq!(q["lastViewedAt>>"], "0");
+                        serde_json::json!({"MediaContainer":{"offset":0,"size":0,"totalSize":0}})
+                    }
+                    _ => panic!("Unexpected request"),
+                };
+                let body = data.to_string();
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            }
+        });
+        let client = Client::connect(&address, Secret::new("fixture-token".into()).unwrap(), "fixture").unwrap();
+        let page = client.changed_page("1", None, ChangeField::Metadata, 1_700_000_000, None).unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert!(page.next.is_none());
+        assert!(client.changed_page("1", None, ChangeField::Watched, -5, None).unwrap().items.is_empty());
+        assert_eq!(client.count("1", Some("4")).unwrap(), 12);
+        server.join().unwrap();
     }
     #[test]
     fn playlist_pages_preserve_video_order_and_repeated_entries() {

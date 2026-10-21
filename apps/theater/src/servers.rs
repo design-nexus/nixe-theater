@@ -133,7 +133,7 @@ pub fn refresh() {
 }
 pub fn start() {
     plex::start();
-    jellyfin::refresh()
+    jellyfin::start()
 }
 pub fn cancel() {
     crate::reconcile::cancel();

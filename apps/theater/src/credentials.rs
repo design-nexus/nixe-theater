@@ -71,6 +71,18 @@ pub fn delete_for(provider: &str, address: &str) -> Result<()> {
     if status.success() { Ok(()) } else { Err(failure()) }
 }
 
+/// The Plex account token from signing in, kept so a server that moved can be found again.
+const ACCOUNT: (&str, &str) = ("plex-account", "plex.tv");
+pub fn save_account(secret: &Secret) -> Result<()> {
+    save_for(ACCOUNT.0, ACCOUNT.1, secret)
+}
+pub fn load_account() -> Result<Secret> {
+    load_for(ACCOUNT.0, ACCOUNT.1)
+}
+pub fn delete_account() -> Result<()> {
+    delete_for(ACCOUNT.0, ACCOUNT.1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

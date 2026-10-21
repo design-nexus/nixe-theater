@@ -9,6 +9,14 @@
   channel, checked against the generation. Each library is fetched on its own: one that
   fails (other than sign-in or offline) is reported (`Skipped`) and keeps its cached titles.
   `servers::MAX_TITLES` is a safety stop per kind.
+- `sync.rs`: incremental sync. `start()` syncs incrementally, `refresh()` fully. A library
+  with `SyncMarks` (cache table `library_sync`: last sync, last full sync, the server's
+  counts per kind) asks for titles changed since (Plex `updatedAt>>`/`lastViewedAt>>`,
+  Jellyfin `minDateLastSaved`/`…ForUser`), lays them over `Cache::snapshot_items`, and
+  falls back to a full fetch when the counts show a removal or a day has passed.
+- Plex re-discovery: the account token from signing in is kept (`credentials::*_account`);
+  when the saved address is offline or its token is refused, `nixe_plex::rediscover`
+  finds the server by machine id and the new address replaces the old one.
 - `servers.rs`: routing by `ServerId`, so a credential is never used on another server.
   `Catalog` keeps an id → position index (`position()` checks it; `items` is also set
   directly). Watch overlays carry revisions (`servers::revision`) so a late server reply
@@ -32,4 +40,5 @@
 - Checks: `cargo test -p nixe-theater -p nixe-plex -p nixe-jellyfin -p nixe-media-model
   -p nixe-media-cache`, and clippy `--all-targets -- -D warnings` on the same.
 - Not yet checked against live servers: conversion, bitmap subtitle timing, multipart
-  transitions, reconciliation, up-next and the early-EOF reopen.
+  transitions, reconciliation, up-next, the early-EOF reopen, incremental sync (the
+  filters and counts are fixture-tested only) and Plex re-discovery.

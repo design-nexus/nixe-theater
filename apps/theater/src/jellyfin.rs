@@ -100,7 +100,50 @@ fn scope(items: &mut [MediaItem], known: &[MediaItem]) {
             }
     }
 }
+/// At startup: libraries synced recently fetch only what changed.
+pub fn start() {
+    sync(false);
+}
+/// The whole of every library.
 pub fn refresh() {
+    sync(true);
+}
+/// What changed in `library` since `since`, over its snapshot; None when something was
+/// removed and only a full fetch will do. Jellyfin counts a library's titles as one kind.
+fn incremental(
+    client: &Client,
+    cache: &nixe_media_cache::Cache,
+    library: &Library,
+    marks: &nixe_media_cache::SyncMarks,
+    since: i64,
+    cancelled: &AtomicBool,
+) -> Result<Option<crate::sync::Synced>, ProviderError> {
+    let mut changed = vec![];
+    for field in [nixe_jellyfin::ChangeField::Metadata, nixe_jellyfin::ChangeField::Watched] {
+        let mut next = None;
+        loop {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(ProviderError::Failed("Refresh cancelled".into()));
+            }
+            let page = client.changed_page(&library.id, field, since, next.as_deref())?;
+            changed.extend(page.items);
+            if changed.len() > servers::MAX_TITLES {
+                return Ok(None);
+            }
+            next = page.next;
+            if next.is_none() {
+                break;
+            }
+        }
+    }
+    let cached = cache
+        .snapshot_items(client.server_id(), &library.id)
+        .map_err(|_| ProviderError::Failed("Could not read the Jellyfin library cache".into()))?;
+    let (items, added) = crate::sync::apply(cached, changed, 1, |_| Some(0));
+    let now = vec![client.count(&library.id)?];
+    Ok(crate::sync::nothing_removed(&marks.counts, &now, &added).then_some((items, now)))
+}
+fn sync(full: bool) {
     let Some(settings) = prefs::get().jellyfin else { return };
     let (generation, cancelled) = begin();
     let started = servers::revision();
@@ -131,7 +174,15 @@ pub fn refresh() {
             let mut all = vec![];
             let cached = cache.all_items(client.server_id()).unwrap_or_default();
             for library in &libraries {
+                let marks = cache.sync_marks(client.server_id(), &library.id).ok().flatten();
+                let sync_started = crate::sync::now_secs();
                 let loaded = (|| {
+                    if let (crate::sync::Plan::Since(since), Some(marks)) = (crate::sync::plan(marks.as_ref(), 1, sync_started, full), &marks)
+                        && let Some((items, counts)) = incremental(&client, &cache, library, marks, since, &cancelled)?
+                    {
+                        publish(Update::Batch(items.clone()))?;
+                        return Ok((items, counts, false));
+                    }
                     let mut items = vec![];
                     let mut pending = vec![];
                     let mut next = None;
@@ -150,15 +201,17 @@ pub fn refresh() {
                         }
                         next = page.next;
                         if next.is_none() {
-                            return Ok(items);
+                            // Without a count the next sync is a full one again.
+                            let counts = client.count(&library.id).map(|n| vec![n]).unwrap_or_default();
+                            return Ok((items, counts, true));
                         }
                     }
                 })();
                 if cancelled.load(Ordering::Relaxed) {
                     return Err(ProviderError::Failed("Refresh cancelled".into()));
                 }
-                let items = match loaded {
-                    Ok(items) => items,
+                let (items, counts, was_full) = match loaded {
+                    Ok(loaded) => loaded,
                     Err(e @ (ProviderError::AuthenticationRequired | ProviderError::Offline)) => return Err(e),
                     // One library failing keeps the others; its cached titles stay.
                     Err(e) => {
@@ -170,6 +223,12 @@ pub fn refresh() {
                 cache
                     .replace_library_since(client.server_id(), &library.id, &items, started)
                     .map_err(|_| ProviderError::Failed("Could not save the Jellyfin library cache".into()))?;
+                let full_at = if was_full { sync_started } else { marks.map_or(sync_started, |m| m.full_at) };
+                let _ = cache.set_sync_marks(
+                    client.server_id(),
+                    &library.id,
+                    &nixe_media_cache::SyncMarks { synced_at: sync_started, full_at, counts },
+                );
                 all.extend(items);
             }
             let mut continuing = continuing;

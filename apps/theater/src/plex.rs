@@ -114,8 +114,92 @@ pub fn database() -> Result<nixe_media_cache::Cache, ProviderError> {
     nixe_media_cache::Cache::open(&nixe_core::paths::cache_dir().join("library.sqlite3"))
         .map_err(|_| ProviderError::Failed("Metadata cache is unavailable".into()))
 }
+/// At startup: libraries synced recently fetch only what changed.
 pub fn start() {
-    refresh();
+    sync(false);
+}
+/// The whole of every library.
+pub fn refresh() {
+    sync(true);
+}
+/// The kinds a library's titles are counted by: (`type` for Plex, kind).
+fn kinds(library: &nixe_media_model::Library) -> &'static [(Option<&'static str>, MediaKind)] {
+    if library.kind == MediaKind::Series {
+        &[(None, MediaKind::Series), (Some("3"), MediaKind::Season), (Some("4"), MediaKind::Episode)]
+    } else {
+        &[(None, MediaKind::Movie)]
+    }
+}
+fn kind_of(library: &nixe_media_model::Library, item: &MediaItem) -> Option<usize> {
+    kinds(library).iter().position(|(_, kind)| *kind == item.kind)
+}
+fn counts(client: &Client, library: &nixe_media_model::Library) -> Result<Vec<u64>, ProviderError> {
+    kinds(library).iter().map(|(kind, _)| client.count(&library.id, *kind)).collect()
+}
+/// What changed in `library` since `since`, over its snapshot; None when something was
+/// removed and only a full fetch will do.
+fn incremental(
+    client: &Client,
+    cache: &nixe_media_cache::Cache,
+    library: &nixe_media_model::Library,
+    marks: &nixe_media_cache::SyncMarks,
+    since: i64,
+    cancelled: &AtomicBool,
+    publish: &mut impl FnMut(Vec<MediaItem>) -> Result<(), ProviderError>,
+) -> Result<Option<crate::sync::Synced>, ProviderError> {
+    let mut changed = Vec::new();
+    for (kind, _) in kinds(library) {
+        for field in [nixe_plex::ChangeField::Metadata, nixe_plex::ChangeField::Watched] {
+            let mut next = None;
+            loop {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(ProviderError::Failed("Refresh cancelled".into()));
+                }
+                let page = client.changed_page(&library.id, *kind, field, since, next.as_deref())?;
+                changed.extend(page.items);
+                if changed.len() > crate::servers::MAX_TITLES {
+                    return Ok(None);
+                }
+                next = page.next;
+                if next.is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    // Collections are few; they're fetched whole.
+    let collections = match fetch(client, &library.id, true, false, false, cancelled, publish) {
+        Ok(collections) => collections,
+        Err(ProviderError::NotFound) => Vec::new(),
+        Err(e) => return Err(e),
+    };
+    let cached: Vec<MediaItem> = cache
+        .snapshot_items(client.server_id(), &library.id)
+        .map_err(|_| ProviderError::Failed("Could not read the Plex library cache".into()))?
+        .into_iter()
+        .filter(|i| i.kind != MediaKind::Collection)
+        .collect();
+    let (mut items, added) = crate::sync::apply(cached, changed.clone(), kinds(library).len(), |i| kind_of(library, i));
+    let now = counts(client, library)?;
+    if !crate::sync::nothing_removed(&marks.counts, &now, &added) {
+        return Ok(None);
+    }
+    if !changed.is_empty() {
+        publish(changed)?;
+    }
+    items.extend(collections);
+    Ok(Some((items, now)))
+}
+/// Find the configured server through the account when its saved address no longer
+/// answers: the client, and its token saved for the new address. None without an
+/// account token (a manual connection).
+fn rediscover(settings: &PlexSettings, client_id: &str) -> Option<Result<Client, ProviderError>> {
+    let account = credentials::load_account().ok()?;
+    Some((|| {
+        let (client, token) = nixe_plex::rediscover(client_id, &account, &settings.server.id)?;
+        credentials::save(&client.address(), &token)?;
+        Ok(client)
+    })())
 }
 fn fetch(
     client: &Client,
@@ -171,7 +255,7 @@ enum RefreshEvent {
 fn merge_items(state: &mut State, items: Vec<MediaItem>) {
     state.catalog.merge(items)
 }
-pub fn refresh() {
+fn sync(full: bool) {
     let Some(settings) = prefs::get().plex else { return };
     let client_id = prefs::get().client_id;
     let (generation, cancelled) = begin();
@@ -190,8 +274,16 @@ pub fn refresh() {
             if cancelled.load(Ordering::Relaxed) {
                 return Err(ProviderError::Failed("Refresh cancelled".into()));
             }
-            let secret = credentials::load(&settings.address)?;
-            let client = Client::reconnect(&settings.address, secret, &client_id)?;
+            let saved = credentials::load(&settings.address).and_then(|secret| Client::reconnect(&settings.address, secret, &client_id));
+            let client = match saved {
+                Ok(client) => client,
+                // The server moved (a new address) or its token was replaced.
+                Err(e @ (ProviderError::Offline | ProviderError::AuthenticationRequired)) => match rediscover(&settings, &client_id) {
+                    Some(Ok(client)) => client,
+                    _ => return Err(e),
+                },
+                Err(e) => return Err(e),
+            };
             let libraries = client.list_libraries()?;
             publish(RefreshEvent::Ready(client.clone(), libraries.clone()))?;
             let continuing = client
@@ -208,7 +300,15 @@ pub fn refresh() {
             let cached = cache.all_items(client.server_id()).unwrap_or_default();
             for library in &libraries {
                 let mut batch = |items| publish(RefreshEvent::Batch(items));
+                let marks = cache.sync_marks(client.server_id(), &library.id).ok().flatten();
+                let sync_started = crate::sync::now_secs();
                 let loaded = (|| {
+                    if let (crate::sync::Plan::Since(since), Some(marks)) =
+                        (crate::sync::plan(marks.as_ref(), kinds(library).len(), sync_started, full), &marks)
+                        && let Some((items, counts)) = incremental(&client, &cache, library, marks, since, &cancelled, &mut batch)?
+                    {
+                        return Ok((items, counts, false));
+                    }
                     let mut items = fetch(&client, &library.id, false, false, false, &cancelled, &mut batch)?;
                     match fetch(&client, &library.id, true, false, false, &cancelled, &mut batch) {
                         Ok(collections) => items.extend(collections),
@@ -219,13 +319,14 @@ pub fn refresh() {
                         items.extend(fetch(&client, &library.id, false, false, true, &cancelled, &mut batch)?);
                         items.extend(fetch(&client, &library.id, false, true, false, &cancelled, &mut batch)?);
                     }
-                    Ok(items)
+                    // Without counts the next sync is a full one again.
+                    Ok((items, counts(&client, library).unwrap_or_default(), true))
                 })();
                 if cancelled.load(Ordering::Relaxed) {
                     return Err(ProviderError::Failed("Refresh cancelled".into()));
                 }
-                let items = match loaded {
-                    Ok(items) => items,
+                let (items, counts, was_full) = match loaded {
+                    Ok(loaded) => loaded,
                     // Signed out, or the server's gone: that's every library, not this one.
                     Err(e @ (ProviderError::AuthenticationRequired | ProviderError::Offline)) => return Err(e),
                     // One library failing keeps the others; its cached titles stay.
@@ -238,6 +339,12 @@ pub fn refresh() {
                 cache
                     .replace_library_since(client.server_id(), &library.id, &items, started)
                     .map_err(|_| ProviderError::Failed("Could not save the Plex library cache".into()))?;
+                let full_at = if was_full { sync_started } else { marks.map_or(sync_started, |m| m.full_at) };
+                let _ = cache.set_sync_marks(
+                    client.server_id(),
+                    &library.id,
+                    &nixe_media_cache::SyncMarks { synced_at: sync_started, full_at, counts },
+                );
                 all.extend(items);
             }
             let mut positions: HashMap<_, _> = all.iter().enumerate().map(|(i, item)| (item.id.clone(), i)).collect();
@@ -292,6 +399,8 @@ pub fn refresh() {
                         window::status("The Plex server identity changed. Reconnect to choose the server.");
                         break;
                     }
+                    let old = prefs::get().plex.map(|p| p.address).unwrap_or_default();
+                    let moved = !old.is_empty() && old != client.address();
                     prefs::update(|p| {
                         p.plex = Some(PlexSettings {
                             address: client.address(),
@@ -300,6 +409,12 @@ pub fn refresh() {
                             libraries,
                         })
                     });
+                    if moved {
+                        // Found again at a new address; its token was saved there.
+                        std::thread::spawn(move || {
+                            let _ = credentials::delete(&old);
+                        });
+                    }
                     STATE.with(|s| {
                         let mut state = s.borrow_mut();
                         state.items.retain(|i| i.id.server == server);
@@ -351,7 +466,11 @@ pub fn disconnect() {
     let server = settings.server.clone();
     let (generation, _) = begin();
     nixe_core::cmd::background(
-        move || credentials::delete(&settings.address),
+        move || {
+            // Signed out of the account too; there may be none (a manual connection).
+            let _ = credentials::delete_account();
+            credentials::delete(&settings.address)
+        },
         move |result| {
             if !current(generation) {
                 return;
@@ -540,35 +659,39 @@ fn connected(ui: std::rc::Rc<LoginUi>, result: ConnectionResult) {
         Err(error) => ui.busy(false, &error.to_string()),
     }
 }
-fn prepare(client: Client, secret: Secret, alive: &AtomicBool) -> ConnectionResult {
+fn prepare(client: Client, secret: Secret, account: Option<Secret>, alive: &AtomicBool) -> ConnectionResult {
     let libraries = client.list_libraries()?;
     if !alive.load(Ordering::Relaxed) {
         return Err(ProviderError::Failed("Sign-in cancelled".into()));
     }
     credentials::save(&client.address(), &secret)?;
+    // Kept so the server can be found again if its address changes.
+    if let Some(account) = account {
+        credentials::save_account(&account)?;
+    }
     Ok((client, libraries))
 }
 fn connect_manual(ui: std::rc::Rc<LoginUi>, address: String, token: Secret) {
     ui.busy(true, "Connecting to Plex…");
-    let (client_id, alive) = (prefs::get().client_id, ui.alive.clone());
+    let (client_id, alive, account) = (prefs::get().client_id, ui.alive.clone(), ui.account.borrow().clone());
     nixe_core::cmd::background(
         move || {
             let client = Client::connect(&address, token.clone(), &client_id)?;
-            prepare(client, token, &alive)
+            prepare(client, token, account, &alive)
         },
         move |result| connected(ui, result),
     );
 }
 fn connect_discovered(ui: std::rc::Rc<LoginUi>, server: nixe_plex::DiscoveredServer) {
     ui.busy(true, &format!("Connecting to {}…", server.name));
-    let (client_id, alive) = (prefs::get().client_id, ui.alive.clone());
+    let (client_id, alive, account) = (prefs::get().client_id, ui.alive.clone(), ui.account.borrow().clone());
     nixe_core::cmd::background(
         move || {
             if !alive.load(Ordering::Relaxed) {
                 return Err(ProviderError::Failed("Sign-in cancelled".into()));
             }
             let (client, token) = server.connect(&client_id)?;
-            prepare(client, token, &alive)
+            prepare(client, token, account, &alive)
         },
         move |result| connected(ui, result),
     );

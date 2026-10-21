@@ -20,6 +20,7 @@ mod rich_details;
 mod rating_icons;
 mod rating_index;
 mod servers;
+mod sync;
 mod settings;
 mod theme;
 mod view_cache;

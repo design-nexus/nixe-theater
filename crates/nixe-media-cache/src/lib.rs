@@ -8,6 +8,21 @@ pub struct Cache {
     db: Connection,
 }
 
+/// When a library was last brought up to date, and what the server counted then.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SyncMarks {
+    /// Unix seconds when the last sync of any kind began.
+    pub synced_at: i64,
+    /// Unix seconds when the last full sync began.
+    pub full_at: i64,
+    /// The server's title counts at the last sync, one per kind the provider lists.
+    pub counts: Vec<u64>,
+}
+
+const LIBRARY_SYNC: &str = "CREATE TABLE IF NOT EXISTS library_sync (
+    server TEXT NOT NULL, library TEXT NOT NULL, synced_at INTEGER NOT NULL,
+    full_at INTEGER NOT NULL, counts TEXT NOT NULL, PRIMARY KEY(server, library));";
+
 impl Cache {
     /// Open on a worker thread, not GTK's main thread.
     pub fn open(path: &Path) -> Result<Self> {
@@ -20,12 +35,16 @@ impl Cache {
     fn from_connection(db: Connection) -> Result<Self> {
         db.busy_timeout(std::time::Duration::from_secs(3))?;
         let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        ensure!(version <= 3, "This cache needs a newer version of Theater");
+        ensure!(version <= 4, "This cache needs a newer version of Theater");
         // Existing WAL databases need no schema writes on cache readers/artwork workers.
-        if version == 3 {
+        if version == 4 {
             return Ok(Self { db });
         }
-        db.execute_batch(
+        if version == 3 {
+            db.execute_batch(&format!("{LIBRARY_SYNC} PRAGMA user_version=4;"))?;
+            return Ok(Self { db });
+        }
+        db.execute_batch(&format!(
             "PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS media (
                 server TEXT NOT NULL, library TEXT NOT NULL, item TEXT NOT NULL,
@@ -48,8 +67,9 @@ impl Cache {
             CREATE TABLE IF NOT EXISTS item_snapshots (
                 server TEXT NOT NULL, item TEXT NOT NULL, revision INTEGER NOT NULL,
                 PRIMARY KEY(server, item));
-            PRAGMA user_version=3;",
-        )?;
+            {LIBRARY_SYNC}
+            PRAGMA user_version=4;"
+        ))?;
         Ok(Self { db })
     }
 
@@ -99,6 +119,38 @@ impl Cache {
         )?;
         let rows = stmt.query_map(params![key, library], |row| row.get::<_, String>(0))?;
         rows.map(|row| serde_json::from_str(&row?).context("Invalid cached metadata")).collect()
+    }
+
+    /// A library's titles as the last snapshot left them, without local playback.
+    pub fn snapshot_items(&self, server: &ServerId, library: &str) -> Result<Vec<MediaItem>> {
+        let mut stmt = self.db.prepare("SELECT metadata FROM media WHERE server=?1 AND library=?2")?;
+        let rows = stmt.query_map(params![serde_json::to_string(server)?, library], |row| row.get::<_, String>(0))?;
+        rows.map(|row| serde_json::from_str(&row?).context("Invalid cached metadata")).collect()
+    }
+
+    pub fn sync_marks(&self, server: &ServerId, library: &str) -> Result<Option<SyncMarks>> {
+        let row: Option<(i64, i64, String)> = self
+            .db
+            .query_row(
+                "SELECT synced_at, full_at, counts FROM library_sync WHERE server=?1 AND library=?2",
+                params![serde_json::to_string(server)?, library],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        Ok(row.map(|(synced_at, full_at, counts)| SyncMarks {
+            synced_at,
+            full_at,
+            counts: serde_json::from_str(&counts).unwrap_or_default(),
+        }))
+    }
+
+    pub fn set_sync_marks(&self, server: &ServerId, library: &str, marks: &SyncMarks) -> Result<()> {
+        self.db.execute(
+            "INSERT INTO library_sync VALUES (?1,?2,?3,?4,?5) ON CONFLICT(server,library) DO UPDATE
+            SET synced_at=excluded.synced_at, full_at=excluded.full_at, counts=excluded.counts",
+            params![serde_json::to_string(server)?, library, marks.synced_at, marks.full_at, serde_json::to_string(&marks.counts)?],
+        )?;
+        Ok(())
     }
 
     pub fn all_items(&self, server: &ServerId) -> Result<Vec<MediaItem>> {
@@ -273,6 +325,32 @@ mod tests {
         assert_eq!(cache.details(&parent.id)?.unwrap().1[0].watch.position_ms, 40_000);
         cache.save_details(&parent, &[], 35)?;
         assert!(cache.details(&parent.id)?.unwrap().1.is_empty());
+        Ok(())
+    }
+    #[test]
+    fn sync_marks_round_trip_and_snapshots_skip_playback() -> Result<()> {
+        let mut cache = Cache::from_connection(Connection::open_in_memory()?)?;
+        let server = ServerId { provider: ProviderKind::Plex, id: "server".into() };
+        assert_eq!(cache.sync_marks(&server, "movies")?, None);
+        let marks = SyncMarks { synced_at: 20, full_at: 10, counts: vec![3, 4] };
+        cache.set_sync_marks(&server, "movies", &marks)?;
+        cache.set_sync_marks(&server, "movies", &marks)?;
+        assert_eq!(cache.sync_marks(&server, "movies")?, Some(marks));
+        let original = item(&server, "Movie");
+        cache.replace_library_since(&server, "movies", std::slice::from_ref(&original), 5)?;
+        let mut playing = original.clone();
+        playing.watch.position_ms = 42_000;
+        cache.record_playback(&playing, 20)?;
+        assert_eq!(cache.snapshot_items(&server, "movies")?[0].watch.position_ms, 0);
+        Ok(())
+    }
+    #[test]
+    fn a_version_3_cache_gains_sync_marks() -> Result<()> {
+        let db = Connection::open_in_memory()?;
+        db.execute_batch("PRAGMA user_version=3;")?;
+        let cache = Cache::from_connection(db)?;
+        let server = ServerId { provider: ProviderKind::Plex, id: "server".into() };
+        assert_eq!(cache.sync_marks(&server, "movies")?, None);
         Ok(())
     }
     #[test]

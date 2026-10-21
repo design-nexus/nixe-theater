@@ -187,6 +187,7 @@ impl Client {
         }
         Ok(libraries)
     }
+    #[allow(clippy::too_many_arguments)]
     fn page(
         &self,
         library: &str,
@@ -195,6 +196,7 @@ impl Client {
         recursive: bool,
         cursor: Option<&str>,
         resume: bool,
+        extra: &[(&'static str, String)],
     ) -> Result<Page<MediaItem>> {
         let start = cursor.unwrap_or("0").parse::<usize>().map_err(|_| invalid())?;
         if start >= 50_000 {
@@ -214,6 +216,7 @@ impl Client {
         if let Some(parent) = parent {
             query.push(("parentId", id(parent)?.into()));
         }
+        query.extend(extra.iter().cloned());
         let value = self.get(if resume { "UserItems/Resume" } else { "Items" }, &query)?;
         if value["StartIndex"].as_u64().is_some_and(|offset| offset != start as u64) {
             return Err(invalid());
@@ -293,15 +296,34 @@ impl Client {
         Ok(Page { items, next: more.then(|| end.to_string()) })
     }
     pub fn library_page(&self, library: &str, cursor: Option<&str>) -> Result<Page<MediaItem>> {
-        let collection = library == "collections" || library.starts_with("collections:");
-        let mut page = self.page(
-            library,
-            if collection { None } else { Some(library) },
-            if collection { "BoxSet" } else { "Movie,Series,Season,Episode" },
-            true,
-            cursor,
-            false,
-        )?;
+        self.library_query(library, cursor, &[])
+    }
+    /// Titles whose metadata (`field` Metadata) or user data (Watched: played, progress,
+    /// favourites) the server saved after `since` (Unix seconds).
+    pub fn changed_page(&self, library: &str, field: ChangeField, since: i64, cursor: Option<&str>) -> Result<Page<MediaItem>> {
+        let key = match field {
+            ChangeField::Metadata => "minDateLastSaved",
+            ChangeField::Watched => "minDateLastSavedForUser",
+        };
+        self.library_query(library, cursor, &[(key, iso_time(since))])
+    }
+    /// How many titles the library has, as the server counts them.
+    pub fn count(&self, library: &str) -> Result<u64> {
+        let (parent, types) = library_scope(library);
+        let mut query = vec![
+            ("userId", self.user.clone()),
+            ("limit", "0".to_string()),
+            ("recursive", "true".into()),
+            ("includeItemTypes", types.into()),
+        ];
+        if let Some(parent) = parent {
+            query.push(("parentId", id(parent)?.into()));
+        }
+        self.get("Items", &query)?["TotalRecordCount"].as_u64().ok_or_else(invalid)
+    }
+    fn library_query(&self, library: &str, cursor: Option<&str>, extra: &[(&'static str, String)]) -> Result<Page<MediaItem>> {
+        let (parent, types) = library_scope(library);
+        let mut page = self.page(library, parent, types, true, cursor, false, extra)?;
         for item in &mut page.items {
             if item.versions.iter().any(|version| version.parts.len() > 1) {
                 let mut full = self.detail(&item.id)?;
@@ -313,10 +335,10 @@ impl Client {
     }
     pub fn child_page(&self, item: &ItemId, library: &str, cursor: Option<&str>) -> Result<Page<MediaItem>> {
         self.validate(item)?;
-        self.page(library, Some(&item.id), "Movie,Series,Season,Episode,BoxSet", false, cursor, false)
+        self.page(library, Some(&item.id), "Movie,Series,Season,Episode,BoxSet", false, cursor, false, &[])
     }
     pub fn continue_page(&self) -> Result<Page<MediaItem>> {
-        self.page("", None, "Movie,Episode", false, None, true)
+        self.page("", None, "Movie,Episode", false, None, true, &[])
     }
     fn validate(&self, item: &ItemId) -> Result<()> {
         if item.server != self.server {
@@ -815,6 +837,27 @@ impl Client {
 fn date(value: &Value) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(value.as_str()?).ok().map(|d| d.timestamp())
 }
+/// What `Client::changed_page` asks about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChangeField {
+    Metadata,
+    Watched,
+}
+
+/// A library's parent folder and the item types it lists. The pseudo-library
+/// "collections" lists box sets from anywhere.
+fn library_scope(library: &str) -> (Option<&str>, &'static str) {
+    if library == "collections" || library.starts_with("collections:") {
+        (None, "BoxSet")
+    } else {
+        (Some(library), "Movie,Series,Season,Episode")
+    }
+}
+
+fn iso_time(secs: i64) -> String {
+    chrono::DateTime::from_timestamp(secs.max(0), 0).unwrap_or_default().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
 pub fn parse_item(value: &Value, server: &ServerId, library: &str) -> Option<MediaItem> {
     let key = id(value["Id"].as_str()?).ok()?.to_owned();
     let kind = match value["Type"].as_str()? {
@@ -1402,6 +1445,13 @@ mod tests {
         }
         assert!(client.sessions.lock().unwrap().is_empty());
         server.join().unwrap();
+    }
+    #[test]
+    fn change_queries_use_utc_dates_and_the_library_scope() {
+        assert_eq!(iso_time(1_700_000_000), "2023-11-14T22:13:20Z");
+        assert_eq!(iso_time(-1), "1970-01-01T00:00:00Z");
+        assert_eq!(library_scope("collections"), (None, "BoxSet"));
+        assert_eq!(library_scope("abc"), (Some("abc"), "Movie,Series,Season,Episode"));
     }
     #[test]
     fn rejects_credential_addresses_and_incomplete_multipart_metadata() {
