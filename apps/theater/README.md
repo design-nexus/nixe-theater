@@ -6,7 +6,7 @@ play them, and pick up where you left off.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/design-nexus/nixe/main/install.sh | bash -s -- theater
+curl -fsSL https://raw.githubusercontent.com/design-nexus/nixe-theater/main/install.sh | bash -s -- theater
 ```
 
 This installs mpv, FFmpeg and libsecret if they're missing, builds with Cargo, and installs
