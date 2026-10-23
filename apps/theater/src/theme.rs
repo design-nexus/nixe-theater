@@ -28,10 +28,8 @@ pub fn install() {
 /// The colours around and over a playing video.
 fn video_colors(p: &Palette) -> String {
     format!(
-        "@define-color theme_video {};\n@define-color theme_on_video {};\n",
-        // Around the picture: the darkest colour the theme has.
-        if p.light { &p.text } else { &p.shadow },
-        // Text over the picture's dark surround.
+        "@define-color theme_video #000000;\n@define-color theme_on_video {};\n",
+        // Text over the picture's black surround.
         if p.light { &p.bg } else { &p.text },
     )
 }
