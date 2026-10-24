@@ -42,6 +42,34 @@
 }
 .theater-window .group-poster-monogram { font-size: 3.0em; font-weight: 700; color: @theme_accent; }
 .theater-window .group-poster-kind { font-size: 0.72em; letter-spacing: 2px; color: @theme_dim_text; }
+.theater-window .theater-poster-play {
+  min-width: 46px;
+  min-height: 46px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+.theater-window .theater-poster-play:hover,
+.theater-window .theater-poster-play:active,
+.theater-window .theater-poster-play:focus-visible { background: transparent; box-shadow: none; }
+.theater-window .theater-list-card {
+  padding: 8px;
+  border-bottom: 1px solid @hairline;
+}
+.theater-window .theater-list-details {
+  padding: 8px;
+  background: transparent;
+  border: none;
+  text-align: left;
+}
+.theater-window .theater-list-details > box > box { min-width: 0; }
+.theater-window .theater-mini-player progressbar { min-width: 100px; }
+.theater-window box.wide-card { padding: 8px; border-radius: 9px; }
+.theater-window box.wide-card:hover { background: @row_hover; }
+.theater-window .theater-playlist-header { margin: 0 0 16px; }
+.theater-window .theater-playlist-header .card-title { font-size: 1.35em; font-weight: 700; }
 
 /* Detail hierarchy: compact metadata groups, generous section boundaries. */
 @define-color theater_secondary mix(@theme_text, @theme_dim_text, 0.25);
@@ -51,6 +79,9 @@
 .theater-window .group-poster-kind { color: @theater_secondary; }
 .theater-window .page-details .theater-prose { font-size: 0.95em; }
 .theater-window .theater-overview { margin: 0 0 24px; }
+.theater-window .theater-detail-header { margin: 0 0 4px; }
+.theater-window .theater-detail-header > box { min-width: 0; }
+.theater-window .theater-item-menu { min-width: 180px; padding: 6px; }
 .theater-window .theater-source-section { margin: 0 0 28px; }
 .theater-window .theater-content-section { margin: 0 0 32px; }
 .theater-window .theater-content-section > .group-title { margin: 0 0 2px; }

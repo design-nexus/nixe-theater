@@ -10,6 +10,7 @@ struct Ui {
     body: gtk::Box,
     lists: Vec<Playlist>,
     selected: Option<String>,
+    query: String,
     generation: u64,
 }
 #[derive(Default)]
@@ -25,7 +26,11 @@ thread_local! {
 pub fn build(stack: &gtk::Stack) {
     let page = widgets::page("playlists");
     stack.add_named(&page.root, Some("playlists"));
-    UI.with(|ui| *ui.borrow_mut() = Some(Ui { body: page.body, lists: vec![], selected: None, generation: 0 }));
+    UI.with(|ui| *ui.borrow_mut() = Some(Ui { body: page.body, lists: vec![], selected: None, query: String::new(), generation: 0 }));
+}
+pub fn search(query: &str) {
+    UI.with(|ui| if let Some(ui) = ui.borrow_mut().as_mut() { ui.query = query.trim().to_lowercase(); });
+    render();
 }
 pub fn show() {
     reload(true);
@@ -168,71 +173,83 @@ fn select(id: Option<String>) {
     });
 }
 fn render() {
-    let state = UI.with(|ui| ui.borrow().as_ref().map(|ui| (ui.body.clone(), ui.lists.clone(), ui.selected.clone())));
-    let Some((body, lists, selected)) = state else { return };
+    let state = UI.with(|ui| ui.borrow().as_ref().map(|ui| (ui.body.clone(), ui.lists.clone(), ui.selected.clone(), ui.query.clone())));
+    let Some((body, lists, selected, query)) = state else { return };
     while let Some(child) = body.first_child() {
         body.remove(&child);
     }
-    let toolbar = widgets::hbox(8);
-    let new = nixe_ui::widgets::icon_button("list-add-symbolic", "New playlist");
-    new.connect_clicked(|_| name_dialog(None, None));
-    toolbar.append(&new);
-    let refresh = nixe_ui::widgets::icon_button("view-refresh-symbolic", "Refresh server playlists");
-    refresh.connect_clicked(|_| reload(true));
-    toolbar.append(&refresh);
-    body.append(&toolbar);
     if let Some(list) = selected.and_then(|id| lists.iter().find(|p| p.id == id).cloned()) {
+        let views = gtk::Stack::new();
+        views.set_vexpand(true);
+        let selected_view = prefs::get().list_views.get("playlist_contents").copied().unwrap_or(false);
+        let header = widgets::vbox(4);
+        header.add_css_class("theater-playlist-header");
+        let title_row = widgets::hbox(10);
         let back = nixe_ui::widgets::icon_button("go-previous-symbolic", "All playlists");
-        back.set_halign(gtk::Align::Start);
         back.connect_clicked(|_| {
             select(None);
             render();
         });
-        body.append(&back);
+        title_row.append(&back);
         let title = widgets::label(&list.title, "card-title");
-        title.set_wrap(true);
-        body.append(&title);
-        let actions = widgets::hbox(8);
+        title.set_hexpand(true);
+        title.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        title_row.append(&title);
         let play = nixe_ui::widgets::icon_button("media-playback-start-symbolic", "Play playlist");
         play.add_css_class("suggested-action");
         let entries = list.entries.clone();
         play.set_sensitive(!entries.is_empty());
         play.connect_clicked(move |_| start(entries.clone(), 0));
-        actions.append(&play);
+        title_row.append(&play);
         if list.origin.is_none() {
             let rename = nixe_ui::widgets::icon_button("document-edit-symbolic", "Rename playlist");
             let selected = list.clone();
             rename.connect_clicked(move |_| name_dialog(Some(selected.clone()), None));
-            actions.append(&rename);
+            title_row.append(&rename);
             let delete = nixe_ui::widgets::icon_button("user-trash-symbolic", "Delete playlist");
             let selected = list.clone();
             delete.connect_clicked(move |_| delete_dialog(selected.clone()));
-            actions.append(&delete);
-        } else {
-            body.append(&widgets::label("Server playlist · read-only", "dim"));
+            title_row.append(&delete);
         }
-        body.append(&actions);
+        let toggle = nixe_ui::widgets::icon_button("view-list-symbolic", "Switch poster/list view");
+        let switch_views = views.downgrade();
+        toggle.connect_clicked(move |_| {
+            let Some(switch_views) = switch_views.upgrade() else { return };
+            let show_list = switch_views.visible_child_name().as_deref() != Some("list");
+            switch_views.set_visible_child_name(if show_list { "list" } else { "posters" });
+            prefs::update(|p| { p.list_views.insert("playlist_contents".into(), show_list); });
+        });
+        title_row.append(&toggle);
+        header.append(&title_row);
+        let count = list.count.unwrap_or(list.entries.len() as u64);
+        let source = if list.origin.is_some() { "Server playlist · read-only" } else { "Playlist" };
+        header.append(&widgets::label(&format!("{source} · {count} videos"), "dim"));
+        body.append(&header);
         if list.entries.is_empty() {
             body.append(&widgets::label("No playable videos yet. Add movies or episodes from their details.", "dim"));
         }
         let list = Rc::new(list);
         let model = gtk::gio::ListStore::new::<glib::BoxedAnyObject>();
-        for index in 0..list.entries.len() {
+        let entries: Vec<usize> = (0..list.entries.len()).filter(|&i| {
+            query.is_empty() || list.entries[i].media.title.to_lowercase().contains(&query)
+        }).collect();
+        for index in entries {
             model.append(&glib::BoxedAnyObject::new(index));
         }
         let factory = gtk::SignalListItemFactory::new();
+        let list_data = list.clone();
         factory.connect_bind(move |_, row| {
             let row = row.downcast_ref::<gtk::ListItem>().expect("playlist row");
             let Some(value) = row.item().and_downcast::<glib::BoxedAnyObject>() else { return };
             let index = *value.borrow::<usize>();
-            row.set_child(Some(&entry_row(&list, index, &list.entries[index])));
+            row.set_child(Some(&entry_row(&list_data, index, &list_data.entries[index])));
         });
         factory.connect_unbind(|_, row| {
             if let Some(row) = row.downcast_ref::<gtk::ListItem>() {
                 row.set_child(None::<&gtk::Widget>);
             }
         });
-        let view = gtk::ListView::new(Some(gtk::NoSelection::new(Some(model))), Some(factory));
+        let view = gtk::ListView::new(Some(gtk::NoSelection::new(Some(model.clone()))), Some(factory));
         let scroll = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Never)
             .vscrollbar_policy(gtk::PolicyType::External)
@@ -240,12 +257,37 @@ fn render() {
             .vexpand(true)
             .child(&view)
             .build();
-        body.append(&scroll);
+        views.add_named(&scroll, Some("list"));
+        let poster_factory = gtk::SignalListItemFactory::new();
+        poster_factory.connect_bind(move |_, row| {
+            let row = row.downcast_ref::<gtk::ListItem>().expect("playlist poster");
+            let Some(value) = row.item().and_downcast::<glib::BoxedAnyObject>() else { return };
+            let index = *value.borrow::<usize>();
+            row.set_child(Some(&entry_poster(&list, index, &list.entries[index])));
+        });
+        poster_factory.connect_unbind(|_, row| if let Some(row) = row.downcast_ref::<gtk::ListItem>() { row.set_child(None::<&gtk::Widget>); });
+        let posters = gtk::GridView::new(Some(gtk::NoSelection::new(Some(model))), Some(poster_factory));
+        posters.add_css_class("poster-grid");
+        posters.set_min_columns(2);
+        posters.set_max_columns(12);
+        let poster_scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::External).min_content_height(400).vexpand(true).child(&posters).build();
+        views.add_named(&poster_scroll, Some("posters"));
+        views.set_visible_child_name(if selected_view { "list" } else { "posters" });
+        body.append(&views);
     } else {
+        let toolbar = widgets::hbox(8);
+        let new = nixe_ui::widgets::icon_button("list-add-symbolic", "New playlist");
+        new.connect_clicked(|_| name_dialog(None, None));
+        toolbar.append(&new);
+        let refresh = nixe_ui::widgets::icon_button("view-refresh-symbolic", "Refresh server playlists");
+        refresh.connect_clicked(|_| reload(true));
+        toolbar.append(&refresh);
+        body.append(&toolbar);
         if lists.is_empty() {
             body.append(&widgets::label("Create a playlist, or connect a server to load its video playlists.", "dim"));
         }
-        let data = Rc::new(lists);
+        let data = Rc::new(lists.into_iter().filter(|list| query.is_empty() || list.title.to_lowercase().contains(&query)).collect::<Vec<_>>());
         let model = gtk::gio::ListStore::new::<glib::BoxedAnyObject>();
         for index in 0..data.len() {
             model.append(&glib::BoxedAnyObject::new(index));
@@ -303,33 +345,11 @@ fn render() {
 fn entry_row(list: &Rc<Playlist>, position: usize, entry: &Entry) -> gtk::Box {
     let line = widgets::hbox(8);
     let media = servers::latest_watch(entry.media.clone());
-    let (title, subtitle, detail) = nixe_media_model::tv::labels(&media);
-    let labels = widgets::vbox(2);
-    labels.set_hexpand(true);
-    let title = widgets::label(&title, "settings-option-title");
-    title.set_ellipsize(gtk::pango::EllipsizeMode::End);
-    title.set_max_width_chars(1);
-    labels.append(&title);
+    let card = crate::library::list_card(&media);
+    card.set_hexpand(true);
+    line.append(&card);
     let offline = servers::client(&media.id.server).is_none();
-    let description = [subtitle, detail, if offline { "Unavailable · reconnect the source".into() } else { String::new() }]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
-    let meta = widgets::label(&description, "dim");
-    meta.set_wrap(true);
-    meta.set_max_width_chars(1);
-    labels.append(&meta);
-    line.append(&labels);
-    let play = gtk::Button::from_icon_name("media-playback-start-symbolic");
-    play.set_tooltip_text(Some("Play from here"));
-    let selected = list.clone();
-    play.connect_clicked(move |_| start(selected.entries.clone(), position));
-    line.append(&play);
-    let details = gtk::Button::from_icon_name("dialog-information-symbolic");
-    details.set_tooltip_text(Some("Details"));
-    details.connect_clicked(move |_| crate::library::show_detail(media.clone()));
-    line.append(&details);
+    if offline { line.append(&widgets::label("Offline", "dim")); }
     if list.origin.is_none() {
         for (icon, delta) in [("go-up-symbolic", -1), ("go-down-symbolic", 1)] {
             let button = nixe_ui::widgets::icon_button(icon, if delta < 0 { "Move up" } else { "Move down" });
@@ -350,6 +370,27 @@ fn entry_row(list: &Rc<Playlist>, position: usize, entry: &Entry) -> gtk::Box {
         line.append(&remove);
     }
     line
+}
+fn entry_poster(list: &Rc<Playlist>, position: usize, entry: &Entry) -> gtk::Box {
+    let media = servers::latest_watch(entry.media.clone());
+    let (art, card) = crate::library::poster_card(&media, false);
+    crate::artwork::load_poster(&art, &media, 420, 630);
+    if list.origin.is_none() {
+        let actions = widgets::hbox(4);
+        for (icon, delta) in [("go-up-symbolic", -1), ("go-down-symbolic", 1)] {
+            let button = nixe_ui::widgets::icon_button(icon, if delta < 0 { "Move up" } else { "Move down" });
+            button.set_sensitive(if delta < 0 { position > 0 } else { position + 1 < list.entries.len() });
+            let (id, key) = (list.id.clone(), entry.id.clone());
+            button.connect_clicked(move |_| { let key = key.clone(); edit(id.clone(), move |list| list.move_entry(&key, delta)); });
+            actions.append(&button);
+        }
+        let remove = nixe_ui::widgets::icon_button("list-remove-symbolic", "Remove from playlist");
+        let (id, key) = (list.id.clone(), entry.id.clone());
+        remove.connect_clicked(move |_| { let key = key.clone(); edit(id.clone(), move |list| list.entries.retain(|e| e.id != key)); });
+        actions.append(&remove);
+        card.root.append(&actions);
+    }
+    card.root
 }
 fn open(list: Playlist) {
     select(Some(list.id.clone()));

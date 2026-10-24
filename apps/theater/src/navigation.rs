@@ -16,8 +16,9 @@ impl Swipe {
         self.x += x;
         self.y += y.abs();
     }
-    fn back(&self) -> bool {
-        self.active && !self.blocked && self.x <= -120.0 && self.x.abs() > self.y * 2.0
+    fn direction(&self) -> i8 {
+        if !self.active || self.blocked || self.x.abs() < 120.0 || self.x.abs() <= self.y * 2.0 { return 0; }
+        if self.x < 0.0 { -1 } else { 1 }
     }
 }
 pub fn install(window: &gtk::ApplicationWindow) {
@@ -52,7 +53,7 @@ pub fn install(window: &gtk::ApplicationWindow) {
                 }
                 if let Some(scroll) = widget.downcast_ref::<gtk::ScrolledWindow>() {
                     let a = scroll.hadjustment();
-                    if a.upper() - a.page_size() > a.lower() + 1.0 && a.value() > a.lower() + 1.0 {
+                    if a.upper() - a.page_size() > a.lower() + 1.0 {
                         swipe.blocked = true;
                         break;
                     }
@@ -64,11 +65,10 @@ pub fn install(window: &gtk::ApplicationWindow) {
         glib::Propagation::Proceed
     });
     controller.connect_scroll_end(move |_| {
-        let back = state.borrow().back();
+        let direction = state.borrow().direction();
         *state.borrow_mut() = Swipe::default();
-        if back {
-            crate::window::back();
-        }
+        if direction < 0 { crate::window::back(); }
+        if direction > 0 { crate::window::forward(); }
     });
     window.add_controller(controller);
 }
@@ -80,16 +80,16 @@ mod tests {
         let mut s = Swipe::default();
         s.begin();
         s.update(-140.0, 8.0);
-        assert!(s.back());
+        assert_eq!(s.direction(), -1);
         s.begin();
         s.update(-20.0, 200.0);
-        assert!(!s.back());
+        assert_eq!(s.direction(), 0);
         s.begin();
         s.update(160.0, 0.0);
-        assert!(!s.back());
+        assert_eq!(s.direction(), 1);
         s.begin();
         s.update(-200.0, 0.0);
         s.blocked = true;
-        assert!(!s.back());
+        assert_eq!(s.direction(), 0);
     }
 }

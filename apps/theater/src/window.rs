@@ -20,6 +20,9 @@ thread_local! {
     static UP_NEXT: RefCell<Option<(gtk::Box, glib::SourceId)>> = const { RefCell::new(None) };
     static UI: RefCell<Option<Ui>> = const { RefCell::new(None) };
     static NAV_HISTORY: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    static NAV_FORWARD: RefCell<Vec<(String, Option<nixe_media_model::MediaItem>)>> = const { RefCell::new(Vec::new()) };
+    static SEARCH_ORIGIN: RefCell<String> = RefCell::new(String::from("home"));
+    static SEARCH_CLEARING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static CLOSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 pub fn is_closing() -> bool {
@@ -176,17 +179,17 @@ pub fn build(app: &gtk::Application) {
     search.set_placeholder_text(Some("Search library"));
     search.set_visible(false);
     search.connect_search_changed(|entry| {
-        crate::library::search(&entry.text());
+        if SEARCH_CLEARING.with(|clearing| clearing.get()) { return; }
+        let origin = SEARCH_ORIGIN.with(|origin| origin.borrow().clone());
+        if origin == "playlists" { crate::playlists::search(&entry.text()); return; }
+        crate::library::search(&entry.text(), &origin);
         if !entry.text().is_empty() {
             show_page("search");
         } else {
-            show_page(&prefs::get().last_section);
+            show_page(&origin);
         }
     });
-    search.connect_stop_search(|s| {
-        s.set_text("");
-        s.set_visible(false);
-    });
+    search.connect_stop_search(|_| hide_search());
     let content = widgets::vbox(0);
     content.add_css_class("settings-content");
     content.set_hexpand(true);
@@ -208,14 +211,47 @@ pub fn build(app: &gtk::Application) {
     let return_video = chrome::status_action("media-playback-start-symbolic", "Return to playback", || navigate("playing"));
     return_video.set_visible(false);
     bar.append(&return_video);
+    let mini = widgets::hbox(6);
+    mini.add_css_class("theater-mini-player");
+    let mini_title = widgets::label("", "status-readout");
+    mini_title.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    mini_title.set_max_width_chars(20);
+    let mini_progress = gtk::ProgressBar::new();
+    mini_progress.set_size_request(100, -1);
+    let mini_back = nixe_ui::widgets::icon_button("media-seek-backward-symbolic", "Seek back");
+    let mini_play = nixe_ui::widgets::icon_button("media-playback-pause-symbolic", "Play or pause");
+    let mini_fwd = nixe_ui::widgets::icon_button("media-seek-forward-symbolic", "Seek forward");
+    for (button, direction) in [(&mini_back, -1.0), (&mini_fwd, 1.0)] {
+        let player = player.clone();
+        button.connect_clicked(move |_| player.borrow().seek_by(direction * prefs::get().seek_seconds as f64));
+    }
+    let mini_player = player.clone();
+    mini_play.connect_clicked(move |_| mini_player.borrow().toggle());
+    mini.append(&mini_title);
+    mini.append(&mini_progress);
+    mini.append(&mini_back);
+    mini.append(&mini_play);
+    mini.append(&mini_fwd);
+    mini.set_visible(false);
+    bar.append(&mini);
     let weak = return_video.downgrade();
+    let weak_mini = mini.downgrade();
     let weak_player = Rc::downgrade(&player);
     glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-        let (Some(button), Some(player)) = (weak.upgrade(), weak_player.upgrade()) else { return glib::ControlFlow::Break };
+        let (Some(button), Some(mini), Some(player)) = (weak.upgrade(), weak_mini.upgrade(), weak_player.upgrade()) else { return glib::ControlFlow::Break };
         if is_closing() {
             return glib::ControlFlow::Break;
         }
-        button.set_visible(player.borrow().has_video());
+        let p = player.borrow();
+        let loaded = p.has_video();
+        let browsing = page() != "playing";
+        button.set_visible(loaded && browsing);
+        mini.set_visible(loaded && browsing);
+        if loaded {
+            mini_title.set_text(&p.title);
+            mini_progress.set_fraction(if p.duration() > 0.0 { (p.position / p.duration()).clamp(0.0, 1.0) } else { 0.0 });
+            mini_play.set_icon_name(if p.paused { "media-playback-start-symbolic" } else { "media-playback-pause-symbolic" });
+        }
         glib::ControlFlow::Continue
     });
     bar.append(&chrome::gear(settings::open));
@@ -237,14 +273,31 @@ pub fn build(app: &gtk::Application) {
     window.connect_default_width_notify(|_| apply_width());
     window.connect_realize(|_| apply_width());
     let keys = gtk::EventControllerKey::new();
+    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
     keys.connect_key_pressed(|_, key, _, mods| {
         let ctrl = mods.contains(gdk::ModifierType::CONTROL_MASK);
+        if key == gdk::Key::space
+            && !mods.intersects(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::ALT_MASK | gdk::ModifierType::SUPER_MASK)
+        {
+            if typing() {
+                return glib::Propagation::Proceed;
+            }
+            UI.with(|u| {
+                if let Some(u) = u.borrow().as_ref() {
+                    if u.player.borrow().has_video() {
+                        u.player.borrow().toggle();
+                    }
+                }
+            });
+            return glib::Propagation::Stop;
+        }
         match key {
             gdk::Key::f | gdk::Key::F if ctrl => show_search(),
             gdk::Key::b | gdk::Key::B if ctrl => toggle_sidebar(),
             gdk::Key::o | gdk::Key::O if ctrl => open_file(),
             gdk::Key::F1 => show_shortcuts(),
             gdk::Key::Left if mods.contains(gdk::ModifierType::ALT_MASK) => back(),
+            gdk::Key::Right if mods.contains(gdk::ModifierType::ALT_MASK) => forward(),
             gdk::Key::Escape if self::window().is_some_and(|w| w.is_fullscreen()) => leave_fullscreen(),
             // Full screen is for the player; with nothing loaded there's nothing to show.
             gdk::Key::f if !ctrl && !typing() && has_video() => toggle_fullscreen(),
@@ -261,7 +314,7 @@ pub fn build(app: &gtk::Application) {
                     s.set_visible(false);
                 }
             }),
-            gdk::Key::space | gdk::Key::Left | gdk::Key::Right if !ctrl => {
+            gdk::Key::Left | gdk::Key::Right if !ctrl => {
                 let handled = UI.with(|u| {
                     if let Some(u) = u.borrow().as_ref() {
                         let focus = gtk::prelude::GtkWindowExt::focus(&u.window);
@@ -276,9 +329,8 @@ pub fn build(app: &gtk::Application) {
                         if u.stack.visible_child_name().as_deref() == Some("playing") {
                             let p = u.player.borrow();
                             match key {
-                                gdk::Key::space => p.toggle(),
-                                gdk::Key::Left => p.seek_by(-5.0),
-                                _ => p.seek_by(5.0),
+                                gdk::Key::Left => p.seek_by(-(prefs::get().seek_seconds as f64)),
+                                _ => p.seek_by(prefs::get().seek_seconds as f64),
                             }
                             return true;
                         }
@@ -361,12 +413,33 @@ pub fn build(app: &gtk::Application) {
 }
 
 fn show_search() {
+    if UI.with(|u| u.borrow().as_ref().is_some_and(|u| u.search.is_visible())) { hide_search(); return; }
     UI.with(|u| {
         if let Some(u) = u.borrow().as_ref() {
+            let current = page();
+            let origin = if matches!(current.as_str(), "home" | "discover" | "movies" | "tv" | "collections" | "playlists") {
+                current
+            } else { prefs::get().last_library_page };
+            let origin = if origin.is_empty() { "home".into() } else { origin };
+            u.search.set_placeholder_text(Some(match origin.as_str() {
+                "movies" => "Search movies", "tv" => "Search TV shows", "collections" => "Search collections",
+                "playlists" => "Search playlists or playlist videos",
+                _ => "Search movies and TV shows",
+            }));
+            SEARCH_ORIGIN.with(|stored| *stored.borrow_mut() = origin);
             u.search.set_visible(true);
             u.search.grab_focus();
         }
     });
+}
+fn hide_search() {
+    SEARCH_CLEARING.with(|clearing| clearing.set(true));
+    let origin = SEARCH_ORIGIN.with(|origin| origin.borrow().clone());
+    UI.with(|u| if let Some(u) = u.borrow().as_ref() { u.search.set_text(""); u.search.set_visible(false); });
+    if origin == "playlists" { crate::playlists::search(""); }
+    else { crate::library::search("", &origin); }
+    SEARCH_CLEARING.with(|clearing| clearing.set(false));
+    if page() == "search" { show_page(&origin); }
 }
 fn show_page(id: &str) {
     UI.with(|u| {
@@ -397,6 +470,8 @@ pub fn page() -> String {
     })
 }
 pub fn navigate(id: &str) {
+    if id != "search" && (page() == "search" || UI.with(|u| u.borrow().as_ref().is_some_and(|u| u.search.is_visible()))) { hide_search(); }
+    NAV_FORWARD.with(|h| h.borrow_mut().clear());
     let previous = page();
     if previous != id {
         NAV_HISTORY.with(|h| {
@@ -432,17 +507,13 @@ pub fn back() {
         return;
     }
     if page() == "search" {
-        let entry = UI.with(|u| u.borrow().as_ref().map(|u| u.search.clone()));
-        if let Some(entry) = entry {
-            entry.set_text("");
-            entry.set_visible(false);
-        }
-        let previous = prefs::get().last_section;
-        navigate_inner(&previous);
+        hide_search();
         return;
     }
     if page() == "details" {
+        let item = crate::library::current();
         crate::library::back();
+        NAV_FORWARD.with(|h| h.borrow_mut().push(("details".into(), item)));
         return;
     }
     back_from_details();
@@ -460,12 +531,23 @@ pub fn back_from_details() {
             None
         })
         .unwrap_or_else(|| "home".into());
+    if current != "details" { NAV_FORWARD.with(|h| h.borrow_mut().push((current, None))); }
     UI.with(|u| {
         if let Some(u) = u.borrow().as_ref() {
             u.search.set_visible(false);
         }
     });
     navigate_inner(&previous);
+}
+pub fn forward() {
+    if let Some((next, item)) = NAV_FORWARD.with(|h| h.borrow_mut().pop()) {
+        let remaining = NAV_FORWARD.with(|h| h.borrow().clone());
+        let current = page();
+        NAV_HISTORY.with(|h| h.borrow_mut().push(current));
+        if let Some(item) = item { crate::library::show_detail(item); }
+        else { navigate_inner(&next); }
+        NAV_FORWARD.with(|h| *h.borrow_mut() = remaining);
+    }
 }
 fn toggle_sidebar() {
     prefs::update(|p| p.sidebar_collapsed = !p.sidebar_collapsed);
@@ -541,9 +623,10 @@ pub const SHORTCUTS: &[(&[&str], &str)] = &[
     (&["Space"], "Play or pause"),
     (&["F"], "Fullscreen"),
     (&["M"], "Mute or unmute"),
-    (&["←", "→"], "Seek 5 seconds"),
+    (&["←", "→"], "Seek by chosen jump interval"),
     (&["Ctrl", "F"], "Search library"),
     (&["Alt", "←"], "Back · or swipe right with two fingers"),
+    (&["Alt", "→"], "Forward · or swipe left with two fingers"),
     (&["Esc"], "Clear search or close settings"),
     (&["Ctrl", "B"], "Collapse sidebar"),
     (&["Ctrl", ","], "Settings"),

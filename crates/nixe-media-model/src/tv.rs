@@ -91,6 +91,45 @@ pub fn recently_added(items: Vec<MediaItem>, seasons: &[MediaItem]) -> Vec<Media
     recent.truncate(18);
     recent
 }
+/// One show card per series, with a compact list of the episodes just added.
+pub fn recently_added_shows(episodes: &[MediaItem], items: &[MediaItem]) -> Vec<(MediaItem, String)> {
+    let shows: HashMap<_, _> = items.iter().filter(|i| i.kind == MediaKind::Series).map(|i| (i.id.clone(), i)).collect();
+    let mut grouped: HashMap<ItemId, Vec<&MediaItem>> = HashMap::new();
+    for episode in episodes {
+        if let Some(series) = episode.series.as_ref().filter(|id| shows.contains_key(*id)) {
+            grouped.entry(series.clone()).or_default().push(episode);
+        }
+    }
+    let mut recent = vec![];
+    for (id, episodes) in grouped {
+        let mut show = (*shows[&id]).clone();
+        let newest = episodes.iter().filter_map(|e| e.added_at).max();
+        show.added_at = newest;
+        let mut seasons: std::collections::BTreeMap<u32, Vec<u32>> = std::collections::BTreeMap::new();
+        for episode in episodes {
+            if newest.zip(episode.added_at).is_some_and(|(latest, added)| latest.saturating_sub(added) > 86400) { continue; }
+            if let (Some(season), Some(number)) = (episode.season_number, episode.episode_number) {
+                seasons.entry(season).or_default().push(number);
+            }
+        }
+        let text = seasons.into_iter().map(|(season, mut numbers)| {
+            numbers.sort_unstable();
+            numbers.dedup();
+            let runs = numbers.into_iter().fold(Vec::<(u32, u32)>::new(), |mut runs, n| {
+                if let Some(last) = runs.last_mut().filter(|(_, end)| *end + 1 == n) { last.1 = n; }
+                else { runs.push((n, n)); }
+                runs
+            });
+            let episodes = runs.into_iter().map(|(start, end)| if start == end { start.to_string() } else { format!("{start}–{end}") })
+                .collect::<Vec<_>>().join(", ");
+            format!("Season {season} · Episode{} {episodes}", if episodes.contains('–') || episodes.contains(',') { "s" } else { "" })
+        }).collect::<Vec<_>>().join(" · ");
+        recent.push((show, text));
+    }
+    recent.sort_by_key(|(show, _)| std::cmp::Reverse(show.added_at));
+    recent.truncate(18);
+    recent
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,5 +172,26 @@ mod tests {
         assert_eq!(recently_added(all[2..].to_vec(), &all).len(), 2);
         all[1].tv.episode_count = None;
         assert_eq!(recently_added(all[2..].to_vec(), &all).len(), 2);
+    }
+    #[test]
+    fn recent_episodes_share_one_show_card_and_summarize_new_run() {
+        let mut show = crate::index::tests::item("plex", "show", None, None);
+        show.kind = MediaKind::Series;
+        let mut episodes = vec![];
+        for n in 1..=5 {
+            let mut episode = show.clone();
+            episode.kind = MediaKind::Episode;
+            episode.id.id = format!("episode-{n}");
+            episode.series = Some(show.id.clone());
+            episode.season_number = Some(1);
+            episode.episode_number = Some(n);
+            episode.added_at = Some(if n == 1 { 1 } else { 200000 });
+            episodes.push(episode);
+        }
+        let mut items = vec![show];
+        items.extend(episodes.iter().cloned());
+        let recent = recently_added_shows(&episodes, &items);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].1, "Season 1 · Episodes 2–5");
     }
 }

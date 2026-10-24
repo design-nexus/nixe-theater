@@ -49,8 +49,8 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
             let p = p.borrow();
             match action {
                 0 => p.toggle(),
-                1 => p.seek_by(-5.0),
-                2 => p.seek_by(5.0),
+                1 => p.seek_by(-(prefs::get().seek_seconds as f64)),
+                2 => p.seek_by(prefs::get().seek_seconds as f64),
                 _ => p.toggle_mute(),
             }
         });
@@ -68,16 +68,21 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
         glib::Propagation::Proceed
     });
     let dragging = Rc::new(Cell::new(0_u32));
+    let last_preview = Rc::new(Cell::new(None::<std::time::Instant>));
     let d = dragging.clone();
     let p = player.clone();
     let pos = seek.pos.clone();
+    let preview = last_preview.clone();
     seek.seek.connect_change_value(move |_, _, value| {
         let generation = d.get().wrapping_add(1);
         d.set(generation);
         pos.set_text(&controls::time(value));
-        p.borrow().seek_fast(value);
+        if preview.get().is_none_or(|last| last.elapsed() >= Duration::from_millis(40)) {
+            p.borrow().seek_fast(value);
+            preview.set(Some(std::time::Instant::now()));
+        }
         let (d, p) = (d.clone(), p.clone());
-        glib::timeout_add_local_once(Duration::from_millis(250), move || {
+        glib::timeout_add_local_once(Duration::from_millis(150), move || {
             if d.get() == generation {
                 d.set(0);
                 p.borrow().seek(value);
@@ -85,6 +90,15 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
         });
         glib::Propagation::Proceed
     });
+    let release = gtk::GestureClick::new();
+    let (d, p, scale) = (dragging.clone(), player.clone(), seek.seek.clone());
+    release.connect_released(move |_, _, _, _| {
+        if d.get() != 0 {
+            d.set(0);
+            p.borrow().seek(scale.value());
+        }
+    });
+    seek.seek.add_controller(release);
     let click = gtk::GestureClick::new();
     click.connect_released(|_, _, _, _| prefs::update(|p| p.time_left = !p.time_left));
     seek.dur.add_controller(click);
@@ -97,6 +111,14 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
             let selected = (p.borrow().number("speed") - speed).abs() < 0.01;
             content.append(&choice(&format!("{speed}×"), if speed == 1.0 { "normal" } else { "" }, selected, move || {
                 p.borrow().set_number("speed", speed);
+                pop.popdown();
+            }));
+        }
+        content.append(&widgets::label("SEEK JUMP", "popover-heading"));
+        for seconds in [5, 10, 30, 60] {
+            let pop = pop.clone();
+            content.append(&choice(&format!("{seconds} seconds"), "", prefs::get().seek_seconds == seconds, move || {
+                prefs::update(|p| p.seek_seconds = seconds);
                 pop.popdown();
             }));
         }

@@ -169,6 +169,15 @@ fn build(page: &Page) {
         |value| prefs::update(|p| p.restore_view = value == "last"),
     );
     g.add(&row);
+    let seek = p.seek_seconds.to_string();
+    let (row, _) = widgets::choice_row(
+        "Seek jump",
+        "Distance for back and forward buttons and the arrow keys.",
+        widgets::opts(&[("5", "5 seconds"), ("10", "10 seconds"), ("30", "30 seconds"), ("60", "60 seconds")]),
+        &seek,
+        |value| if let Ok(seconds) = value.parse::<u32>() { prefs::update(|p| p.seek_seconds = seconds); },
+    );
+    g.add(&row);
     let (row, _) = widgets::switch_row(
         "Play the next episode",
         "When an episode ends, play the next one after a 10-second countdown you can skip or stop.",

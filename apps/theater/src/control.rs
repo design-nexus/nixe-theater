@@ -57,7 +57,7 @@ fn card(i: &MediaItem) -> Value {
 }
 
 /// The next episode of `show` to play: the first unwatched one, in order.
-fn next_up(show: &MediaItem) -> Option<MediaItem> {
+pub fn next_up(show: &MediaItem) -> Option<MediaItem> {
     let mut episodes: Vec<MediaItem> = servers::items()
         .into_iter()
         .filter(|i| i.kind == MediaKind::Episode && i.series.as_ref() == Some(&show.id))

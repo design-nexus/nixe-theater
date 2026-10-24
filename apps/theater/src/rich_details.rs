@@ -28,15 +28,25 @@ fn expand(body: &gtk::Box, title: &str, text: &str) {
 pub fn refresh_current() {
     library::rerender_current();
 }
-pub fn intro(body: &gtk::Box, i: &MediaItem) {
+pub fn intro(body: &gtk::Box, i: &MediaItem) -> gtk::Box {
     let overview = widgets::vbox(12);
     overview.add_css_class("theater-overview");
     body.append(&overview);
     let body = &overview;
+    let header = widgets::hbox(16);
+    header.add_css_class("theater-detail-header");
+    let actions = widgets::hbox(6);
+    actions.set_halign(gtk::Align::Start);
+    actions.set_valign(gtk::Align::Center);
+    actions.set_hexpand(true);
+    header.append(&actions);
+    let rating_column = widgets::vbox(6);
+    rating_column.set_halign(gtk::Align::End);
+    rating_column.set_valign(gtk::Align::Center);
     let ratings = gtk::FlowBox::new();
     ratings.add_css_class("theater-ratings");
     ratings.set_selection_mode(gtk::SelectionMode::None);
-    ratings.set_halign(gtk::Align::Start);
+    ratings.set_halign(gtk::Align::End);
     ratings.set_hexpand(false);
     ratings.set_homogeneous(false);
     ratings.set_max_children_per_line(8);
@@ -68,9 +78,9 @@ pub fn intro(body: &gtk::Box, i: &MediaItem) {
         ratings.insert(&badge, -1);
     }
     ratings.set_visible(!i.metadata.ratings.is_empty());
-    body.append(&ratings);
+    rating_column.append(&ratings);
     let row = widgets::hbox(8);
-    row.set_halign(gtk::Align::Start);
+    row.set_halign(gtk::Align::End);
     let star = gtk::Image::from_icon_name("starred-symbolic");
     star.set_pixel_size(18);
     star.set_tooltip_text(Some("Your rating"));
@@ -87,7 +97,9 @@ pub fn intro(body: &gtk::Box, i: &MediaItem) {
         }
     });
     row.append(&dd);
-    body.append(&row);
+    rating_column.append(&row);
+    header.append(&rating_column);
+    body.append(&header);
     prose(body, &i.metadata.tagline, "theater-hero-meta");
     expand(body, "Synopsis", &i.summary);
     let mut facts = vec![];
@@ -148,6 +160,7 @@ pub fn intro(body: &gtk::Box, i: &MediaItem) {
         b.set_halign(gtk::Align::Start);
         body.append(&b);
     }
+    actions
 }
 fn filter_library(field: &str, value: &str, tv: bool) {
     let page = if tv { "tv" } else { "movies" };
@@ -282,19 +295,21 @@ pub fn television(body: &gtk::Box, i: &MediaItem, children: &[MediaItem]) {
         .collect();
     episodes.sort_by_key(|e| (e.season_number, e.episode_number));
     if let Some(next) = episodes.first() {
-        let button = widgets::labeled_button(
-            "media-playback-start-symbolic",
-            &format!(
+        let row = widgets::hbox(4);
+        let play = nixe_ui::widgets::icon_button("media-playback-start-symbolic", "Play next unwatched episode");
+        let episode = next.clone();
+        play.connect_clicked(move |_| { library::play_item(&episode, false); });
+        row.append(&play);
+        let button = gtk::Button::with_label(&format!(
                 "Next unwatched · S{} E{} · {}",
                 next.season_number.unwrap_or(0),
                 next.episode_number.unwrap_or(0),
                 next.title
-            ),
-        );
-        button.set_halign(gtk::Align::Start);
+            ));
         let next = next.clone();
         button.connect_clicked(move |_| library::show_detail(next.clone()));
-        body.append(&button);
+        row.append(&button);
+        body.append(&row);
     }
 }
 pub fn related(body: &gtk::Box, i: &MediaItem) {

@@ -15,6 +15,8 @@ pub struct Home {
     pub movies: Vec<MediaItem>,
     pub tv: Vec<MediaItem>,
     #[serde(default)]
+    pub tv_new: Vec<(ItemId, String)>,
+    #[serde(default)]
     pub discovery: Vec<Vec<MediaItem>>,
 }
 pub const DISCOVERY_CATEGORIES: &[&str] = &[
@@ -82,12 +84,18 @@ fn discovery(items: &[MediaItem], year: i64, seed: u64) -> Vec<Vec<MediaItem>> {
         })
         .collect()
 }
+fn continuing(item: &MediaItem) -> bool {
+    item.watch.position_ms > 0
+        && item.duration_ms.is_none_or(|duration| item.watch.position_ms < duration.saturating_mul(95) / 100)
+        && matches!(item.kind, MediaKind::Movie | MediaKind::Episode)
+}
 pub struct Request {
     pub generation: u64,
     pub items: Option<Vec<MediaItem>>,
     pub page: String,
     pub filter: String,
     pub query: String,
+    pub search_scope: String,
     pub online: Vec<ServerId>,
     pub cache_scope: Option<String>,
     pub loading: bool,
@@ -117,9 +125,17 @@ impl Worker {
         let worker = Self(Arc::new((Mutex::new(Mailbox::default()), Condvar::new())));
         let (tx, rx) = async_channel::unbounded();
         let mailbox = worker.0.clone();
+        let (save_tx, save_rx) = async_channel::bounded::<(String, View)>(1);
+        std::thread::spawn(move || {
+            while let Ok((key, view)) = save_rx.recv_blocking() {
+                crate::view_cache::save(&crate::view_cache::root(), &key, &view);
+            }
+        });
         std::thread::spawn(move || {
             let mut index = Index::default();
             let mut restored = std::collections::HashSet::new();
+            let mut prepared: HashMap<String, View> = HashMap::new();
+            let mut prepared_order = std::collections::VecDeque::<String>::new();
             loop {
                 let request = {
                     let (lock, wake) = &*mailbox;
@@ -135,7 +151,18 @@ impl Worker {
                 let scope = request.cache_scope.clone();
                 let loading = request.loading;
                 let root = crate::view_cache::root();
-                if let Some(key) = scope.as_ref().filter(|key| restored.insert((*key).clone()))
+                if request.items.is_some() { prepared.clear(); prepared_order.clear(); }
+                if let Some(key) = scope.as_ref()
+                    && request.items.is_none()
+                    && let Some(cached) = prepared.get(key) {
+                        let mut view = cached.clone();
+                        view.generation = request.generation;
+                        let state = mailbox.0.lock().unwrap();
+                        if !state.stopped && state.request.is_none() { let _ = tx.try_send(view); }
+                        continue;
+                    }
+                if index.groups.is_empty()
+                    && let Some(key) = scope.as_ref().filter(|key| restored.insert((*key).clone()))
                     && let Some(cached) = crate::view_cache::load(&root, key, request.generation) {
                         let _ = tx.try_send(cached);
                     }
@@ -151,13 +178,23 @@ impl Worker {
                 if loading && empty {
                     continue;
                 }
-                if let Some(key) = &scope {
-                    crate::view_cache::save(&root, key, &view);
-                }
                 let state = mailbox.0.lock().unwrap();
-                if !state.stopped && state.request.is_none() && tx.try_send(view).is_err() {
+                let current = !state.stopped && state.request.is_none();
+                drop(state);
+                if !current { continue; }
+                if let Some(key) = &scope {
+                    if !prepared.contains_key(key) {
+                        prepared_order.push_back(key.clone());
+                    }
+                    prepared.insert(key.clone(), view.clone());
+                    while prepared_order.len() > 8 {
+                        if let Some(old) = prepared_order.pop_front() { prepared.remove(&old); }
+                    }
+                }
+                if tx.try_send(view.clone()).is_err() {
                     break;
                 }
+                if let Some(key) = scope { let _ = save_tx.try_send((key, view)); }
             }
         });
         (worker, rx)
@@ -257,10 +294,7 @@ impl Index {
                 .enumerate()
                 .filter(|(_, item)| {
                     kind.is_none_or(|kind| item.kind == kind)
-                        && (!resume
-                            || (!item.watch.watched
-                                && item.watch.position_ms > 0
-                                && matches!(item.kind, MediaKind::Movie | MediaKind::Episode)))
+                        && (!resume || continuing(item))
                         && crate::servers::matches_filter(item, &request.filter)
                         && crate::browse::matches(item, &request.browse.filter, &request.online)
                 })
@@ -290,7 +324,9 @@ impl Index {
             let selected: Vec<_> = self.groups.iter().filter_map(|group| select(group, None, false)).collect();
             let episodes: Vec<_> = selected.iter().filter(|i| i.kind == MediaKind::Episode).cloned().collect();
             if !episodes.is_empty() {
-                home.tv = nixe_media_model::tv::recently_added(episodes, &selected);
+                let recent = nixe_media_model::tv::recently_added_shows(&episodes, &selected);
+                home.tv_new = recent.iter().map(|(show, text)| (show.id.clone(), text.clone())).collect();
+                home.tv = recent.into_iter().map(|(show, _)| show).collect();
             }
             if request.page == "discover" {
                 let day =
@@ -352,7 +388,7 @@ impl Index {
                         if request.query.is_empty() {
                             return None;
                         }
-                        let sources = group
+                        let sources: Vec<_> = group
                             .sources
                             .iter()
                             .filter(|i| {
@@ -364,7 +400,14 @@ impl Index {
                             })
                             .cloned()
                             .collect();
-                        select(&UnifiedItem { sources }, None, false)
+                        let kind = match request.search_scope.as_str() {
+                            "movies" => Some(MediaKind::Movie),
+                            "tv" => Some(MediaKind::Series),
+                            "collections" => Some(MediaKind::Collection),
+                            _ => None,
+                        };
+                        let sources = sources.into_iter().filter(|i| kind.is_some() || matches!(i.kind, MediaKind::Movie | MediaKind::Series)).collect();
+                        select(&UnifiedItem { sources }, kind, false)
                     } else {
                         select(group, kind, false)
                     }
@@ -386,6 +429,7 @@ mod tests {
             page: "movies".into(),
             filter: String::new(),
             query: String::new(),
+            search_scope: "home".into(),
             online: vec![],
             cache_scope: None,
             loading: false,
@@ -434,6 +478,12 @@ mod tests {
             versions: vec![],
             watch: WatchState::default(),
         };
+        let mut resumed_movie = item.clone();
+        resumed_movie.watch.position_ms = 120000;
+        resumed_movie.watch.watched = true;
+        assert!(continuing(&resumed_movie));
+        resumed_movie.watch.position_ms = 590000;
+        assert!(!continuing(&resumed_movie));
         for size in [3600, 20000] {
             let mut input = request(1);
             input.items = Some(
@@ -477,6 +527,7 @@ mod cached_check {
             page: "home".into(),
             filter: String::new(),
             query: String::new(),
+            search_scope: "home".into(),
             online: vec![],
             cache_scope: None,
             loading: false,
