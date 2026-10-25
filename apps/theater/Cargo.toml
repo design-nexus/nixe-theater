@@ -7,9 +7,9 @@ license.workspace = true
 
 [dependencies]
 nixe-core = { git = "https://github.com/design-nexus/nixe-core.git", rev = "87682e6c936b6a4f006639b1a1c099e96346c07c" }
-nixe-theme = { git = "https://github.com/design-nexus/nixe-design.git", rev = "f29d088290a00887e1dfe0277a830b082faf1f9f" }
-nixe-ui = { git = "https://github.com/design-nexus/nixe-design.git", rev = "f29d088290a00887e1dfe0277a830b082faf1f9f" }
-nixe-playback = { git = "https://github.com/design-nexus/nixe-design.git", rev = "f29d088290a00887e1dfe0277a830b082faf1f9f" }
+nixe-theme = { git = "https://github.com/design-nexus/nixe-design.git", rev = "64786dc295708951013c126351f1830664a7d15d" }
+nixe-ui = { git = "https://github.com/design-nexus/nixe-design.git", rev = "64786dc295708951013c126351f1830664a7d15d" }
+nixe-playback = { git = "https://github.com/design-nexus/nixe-design.git", rev = "64786dc295708951013c126351f1830664a7d15d" }
 nixe-media-model = { path = "../../crates/nixe-media-model" }
 nixe-media-cache = { path = "../../crates/nixe-media-cache" }
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
