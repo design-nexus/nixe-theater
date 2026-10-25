@@ -4,6 +4,7 @@ mod browse_ui;
 mod catalog;
 mod control;
 mod credentials;
+mod inhibit;
 mod jellyfin;
 mod library;
 mod metadata;

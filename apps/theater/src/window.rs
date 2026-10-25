@@ -244,6 +244,7 @@ pub fn build(app: &gtk::Application) {
         }
         let p = player.borrow();
         let loaded = p.has_video();
+        crate::inhibit::set_playing(loaded && !p.paused);
         let browsing = page() != "playing";
         button.set_visible(loaded && browsing);
         mini.set_visible(loaded && browsing);
@@ -365,6 +366,7 @@ pub fn build(app: &gtk::Application) {
     let p = player.clone();
     window.connect_close_request(move |_| {
         CLOSING.with(|c| c.set(true));
+        crate::inhibit::shutdown();
         crate::library::cancel();
         crate::playlists::cancel();
         crate::artwork::cancel();

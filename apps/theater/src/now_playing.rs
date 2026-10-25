@@ -38,6 +38,7 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
     let controls = OsdControls::new(&seek.root, options.volume, 1.0, options.muted);
     controls.audio.set_tooltip_text(Some("Audio track"));
     controls.shape.set_tooltip_text(Some("Picture: shape and fill"));
+    controls.speed.set_tooltip_text(Some("Speed"));
     controls.prev.connect_clicked(|_| crate::playlists::advance(-1));
     controls.next.connect_clicked(|_| crate::playlists::advance(1));
     controls.prev.set_sensitive(false);
@@ -215,6 +216,11 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
         };
         p.set_number("sub-pos", position.clamp(50.0, 100.0));
     });
+    let (sleep, sleep_left) = crate::inhibit::install_button(player);
+    if let Some(row) = controls.full.parent() {
+        sleep_left.insert_before(&row, Some(&controls.full));
+        sleep.insert_before(&row, Some(&controls.full));
+    }
     let wake = controls::install_autohide(
         &overlay,
         &top,
@@ -225,6 +231,7 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
             controls.speed.clone(),
             controls.audio.clone(),
             controls.subs.clone(),
+            sleep.clone(),
         ],
         Rc::new(move || {
             weak.upgrade().is_some_and(|p| {
@@ -281,6 +288,8 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
             *last_title.borrow_mut() = p.title.clone();
         }
         let playing = p.loaded && !p.paused;
+        crate::inhibit::set_playing(playing);
+        crate::inhibit::refresh_button(&sleep, &sleep_left);
         controls.play.set_icon_name(if playing { "media-playback-pause-symbolic" } else { "media-playback-start-symbolic" });
         controls.play.set_tooltip_text(Some(if playing { "Pause (Space)" } else { "Play (Space)" }));
         controls.mute.set_icon_name(controls::volume_icon(options.volume, options.muted));
