@@ -4,7 +4,7 @@ use crate::{
     prefs, servers, widgets, window,
 };
 use gtk::{glib, prelude::*};
-use nixe_media_model::{MediaItem, MediaKind, ProviderError};
+use nyx_media_model::{MediaItem, MediaKind, ProviderError};
 use std::{cell::RefCell, rc::Rc};
 struct Ui {
     body: gtk::Box,
@@ -185,7 +185,7 @@ fn render() {
         let header = widgets::vbox(4);
         header.add_css_class("theater-playlist-header");
         let title_row = widgets::hbox(10);
-        let back = nixe_ui::widgets::icon_button("go-previous-symbolic", "All playlists");
+        let back = nyx_ui::widgets::icon_button("go-previous-symbolic", "All playlists");
         back.connect_clicked(|_| {
             select(None);
             render();
@@ -195,23 +195,23 @@ fn render() {
         title.set_hexpand(true);
         title.set_ellipsize(gtk::pango::EllipsizeMode::End);
         title_row.append(&title);
-        let play = nixe_ui::widgets::icon_button("media-playback-start-symbolic", "Play playlist");
+        let play = nyx_ui::widgets::icon_button("media-playback-start-symbolic", "Play playlist");
         play.add_css_class("suggested-action");
         let entries = list.entries.clone();
         play.set_sensitive(!entries.is_empty());
         play.connect_clicked(move |_| start(entries.clone(), 0));
         title_row.append(&play);
         if list.origin.is_none() {
-            let rename = nixe_ui::widgets::icon_button("document-edit-symbolic", "Rename playlist");
+            let rename = nyx_ui::widgets::icon_button("document-edit-symbolic", "Rename playlist");
             let selected = list.clone();
             rename.connect_clicked(move |_| name_dialog(Some(selected.clone()), None));
             title_row.append(&rename);
-            let delete = nixe_ui::widgets::icon_button("user-trash-symbolic", "Delete playlist");
+            let delete = nyx_ui::widgets::icon_button("user-trash-symbolic", "Delete playlist");
             let selected = list.clone();
             delete.connect_clicked(move |_| delete_dialog(selected.clone()));
             title_row.append(&delete);
         }
-        let toggle = nixe_ui::widgets::icon_button("view-list-symbolic", "Switch poster/list view");
+        let toggle = nyx_ui::widgets::icon_button("view-list-symbolic", "Switch poster/list view");
         let switch_views = views.downgrade();
         toggle.connect_clicked(move |_| {
             let Some(switch_views) = switch_views.upgrade() else { return };
@@ -277,10 +277,10 @@ fn render() {
         body.append(&views);
     } else {
         let toolbar = widgets::hbox(8);
-        let new = nixe_ui::widgets::icon_button("list-add-symbolic", "New playlist");
+        let new = nyx_ui::widgets::icon_button("list-add-symbolic", "New playlist");
         new.connect_clicked(|_| name_dialog(None, None));
         toolbar.append(&new);
-        let refresh = nixe_ui::widgets::icon_button("view-refresh-symbolic", "Refresh server playlists");
+        let refresh = nyx_ui::widgets::icon_button("view-refresh-symbolic", "Refresh server playlists");
         refresh.connect_clicked(|_| reload(true));
         toolbar.append(&refresh);
         body.append(&toolbar);
@@ -299,15 +299,15 @@ fn render() {
             let Some(value) = row.item().and_downcast::<glib::BoxedAnyObject>() else { return };
             let list = &cards[*value.borrow::<usize>()];
             let width = crate::presentation::width();
-            let art = nixe_ui::media::Artwork::new(width, width * 3 / 2, "view-list-symbolic");
-            let card = nixe_ui::media::PosterCard::new(&art.root, width);
+            let art = nyx_ui::media::Artwork::new(width, width * 3 / 2, "view-list-symbolic");
+            let card = nyx_ui::media::PosterCard::new(&art.root, width);
             card.title.set_text(&list.title);
             card.title.set_tooltip_text(Some(&list.title));
             let source = list
                 .origin
                 .as_ref()
                 .map(|id| match id.server.provider {
-                    nixe_media_model::ProviderKind::Plex => "Plex",
+                    nyx_media_model::ProviderKind::Plex => "Plex",
                     _ => "Jellyfin",
                 })
                 .unwrap_or("Theater");
@@ -352,7 +352,7 @@ fn entry_row(list: &Rc<Playlist>, position: usize, entry: &Entry) -> gtk::Box {
     if offline { line.append(&widgets::label("Offline", "dim")); }
     if list.origin.is_none() {
         for (icon, delta) in [("go-up-symbolic", -1), ("go-down-symbolic", 1)] {
-            let button = nixe_ui::widgets::icon_button(icon, if delta < 0 { "Move up" } else { "Move down" });
+            let button = nyx_ui::widgets::icon_button(icon, if delta < 0 { "Move up" } else { "Move down" });
             button.set_sensitive(if delta < 0 { position > 0 } else { position + 1 < list.entries.len() });
             let (id, key) = (list.id.clone(), entry.id.clone());
             button.connect_clicked(move |_| {
@@ -361,7 +361,7 @@ fn entry_row(list: &Rc<Playlist>, position: usize, entry: &Entry) -> gtk::Box {
             });
             line.append(&button);
         }
-        let remove = nixe_ui::widgets::icon_button("list-remove-symbolic", "Remove from playlist");
+        let remove = nyx_ui::widgets::icon_button("list-remove-symbolic", "Remove from playlist");
         let (id, key) = (list.id.clone(), entry.id.clone());
         remove.connect_clicked(move |_| {
             let key = key.clone();
@@ -378,13 +378,13 @@ fn entry_poster(list: &Rc<Playlist>, position: usize, entry: &Entry) -> gtk::Box
     if list.origin.is_none() {
         let actions = widgets::hbox(4);
         for (icon, delta) in [("go-up-symbolic", -1), ("go-down-symbolic", 1)] {
-            let button = nixe_ui::widgets::icon_button(icon, if delta < 0 { "Move up" } else { "Move down" });
+            let button = nyx_ui::widgets::icon_button(icon, if delta < 0 { "Move up" } else { "Move down" });
             button.set_sensitive(if delta < 0 { position > 0 } else { position + 1 < list.entries.len() });
             let (id, key) = (list.id.clone(), entry.id.clone());
             button.connect_clicked(move |_| { let key = key.clone(); edit(id.clone(), move |list| list.move_entry(&key, delta)); });
             actions.append(&button);
         }
-        let remove = nixe_ui::widgets::icon_button("list-remove-symbolic", "Remove from playlist");
+        let remove = nyx_ui::widgets::icon_button("list-remove-symbolic", "Remove from playlist");
         let (id, key) = (list.id.clone(), entry.id.clone());
         remove.connect_clicked(move |_| { let key = key.clone(); edit(id.clone(), move |list| list.entries.retain(|e| e.id != key)); });
         actions.append(&remove);
@@ -402,7 +402,7 @@ fn open(list: Playlist) {
     };
     let generation = generation();
     window::status("Loading playlist…");
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let mut list = list;
             let mut entries = vec![];
@@ -444,7 +444,7 @@ fn open(list: Playlist) {
     );
 }
 fn edit(id: String, change: impl FnOnce(&mut Playlist) + Send + 'static) {
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || Store::open()?.edit(&id, change),
         |result| match result {
             Ok(()) => reload(false),
@@ -485,7 +485,7 @@ fn name_dialog(existing: Option<Playlist>, item: Option<MediaItem>) {
             if let Some(item) = &item {
                 list.add(item.clone());
             }
-            nixe_core::cmd::background(
+            nyx_core::cmd::background(
                 move || Store::open()?.save(&list),
                 |result| match result {
                     Ok(()) => reload(false),
@@ -519,7 +519,7 @@ fn delete_dialog(list: Playlist) {
     let weak = dialog.downgrade();
     delete.connect_clicked(move |_| {
         let id = list.id.clone();
-        nixe_core::cmd::background(
+        nyx_core::cmd::background(
             move || Store::open()?.delete_local(&id),
             |result| match result {
                 Ok(()) => {
@@ -538,7 +538,7 @@ fn delete_dialog(list: Playlist) {
     dialog.present();
 }
 pub fn add_dialog(item: MediaItem) {
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         || Store::open()?.list(),
         move |result| {
             let lists = match result {
@@ -657,7 +657,7 @@ fn play_at(mut index: usize, delta: isize) {
     } else {
         "Opening playlist video…"
     });
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || client.detail(&media.id),
         move |result| {
             if window::is_closing()

@@ -1,7 +1,7 @@
-//! Theater's playback policy; rendering and client FFI live in nixe-playback.
+//! Theater's playback policy; rendering and client FFI live in nyx-playback.
 use gtk::{glib, prelude::*};
-use nixe_media_model::{MediaItem, PlaybackMode, PlaybackProgress, PlaybackRequest, PlaybackSource, PlaybackState};
-use nixe_playback::{
+use nyx_media_model::{MediaItem, PlaybackMode, PlaybackProgress, PlaybackRequest, PlaybackSource, PlaybackState};
+use nyx_playback::{
     mpv::{Data, EndReason, Event, FORMAT_DOUBLE, FORMAT_FLAG, FORMAT_NODE, Mpv},
     video,
 };
@@ -44,8 +44,8 @@ pub struct Playback {
     burned_subtitle: Option<i64>,
     generation: u64,
     pending: Option<StreamPlan>,
-    requested_server: Option<nixe_media_model::ServerId>,
-    subtitles: Vec<nixe_media_model::ExternalSubtitle>,
+    requested_server: Option<nyx_media_model::ServerId>,
+    subtitles: Vec<nyx_media_model::ExternalSubtitle>,
     subtitle_tracks: std::collections::HashMap<i64, i64>,
     subtitle_choice: Option<i64>,
     subtitle_load: u64,
@@ -263,7 +263,7 @@ impl Playback {
         });
         Ok(())
     }
-    pub fn begin_request(&mut self, server: nixe_media_model::ServerId) -> u64 {
+    pub fn begin_request(&mut self, server: nyx_media_model::ServerId) -> u64 {
         self.requested_server = Some(server);
         self.generation = self.generation.wrapping_add(1);
         self.pending = None;
@@ -313,7 +313,7 @@ impl Playback {
             if !source.headers.is_empty() {
                 return Err("Unsupported playback authentication");
             }
-            let timeline = nixe_playback::timeline::concatenate(
+            let timeline = nyx_playback::timeline::concatenate(
                 std::iter::once(source.url.as_str()).chain(source.additional_urls.iter().map(String::as_str)),
             )
             .ok_or("The server returned an empty playback source")?;
@@ -377,7 +377,7 @@ impl Playback {
         let worker = plan.clone();
         let label = plan.client.label();
         let weak = Rc::downgrade(player);
-        nixe_core::cmd::background(
+        nyx_core::cmd::background(
             move || {
                 worker.client.resolve(PlaybackRequest {
                     burn_subtitle: worker.burn_subtitle,
@@ -503,7 +503,7 @@ impl Playback {
         let url = track.url.clone();
         let weak = Rc::downgrade(player);
         crate::window::status("Loading subtitles…");
-        nixe_core::cmd::background(
+        nyx_core::cmd::background(
             move || client.subtitle(&url),
             move |result| {
                 let Some(player) = weak.upgrade() else { return };
@@ -597,12 +597,12 @@ impl Playback {
         crate::prefs::update(|p| p.muted = !p.muted);
         self.set_string("mute", if crate::prefs::get().muted { "yes" } else { "no" });
     }
-    pub fn uses_server(&self, server: &nixe_media_model::ServerId) -> bool {
+    pub fn uses_server(&self, server: &nyx_media_model::ServerId) -> bool {
         self.remote.as_ref().is_some_and(|remote| remote.media.id.server == *server)
             || self.pending.as_ref().is_some_and(|plan| plan.item.id.server == *server)
             || self.requested_server.as_ref() == Some(server)
     }
-    pub fn cancel_server(&mut self, server: &nixe_media_model::ServerId) {
+    pub fn cancel_server(&mut self, server: &nyx_media_model::ServerId) {
         if self.remote.as_ref().is_some_and(|remote| remote.media.id.server == *server) {
             self.close();
             return;

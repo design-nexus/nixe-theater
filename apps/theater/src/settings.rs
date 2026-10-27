@@ -4,7 +4,7 @@ use crate::{
     window,
 };
 use gtk::{glib, prelude::*};
-use nixe_ui::settings_card::{self, Spec};
+use nyx_ui::settings_card::{self, Spec};
 
 pub fn open() {
     let (Some(overlay), Some(window)) = (window::overlay(), window::window()) else { return };
@@ -29,7 +29,7 @@ pub fn open() {
 
 /// An option row whose action is an icon button.
 fn action_row(title: &str, desc: &str, icon: &str, tip: &str, act: impl Fn() + 'static) -> (gtk::Box, gtk::Button) {
-    let b = nixe_ui::widgets::icon_button(icon, tip);
+    let b = nyx_ui::widgets::icon_button(icon, tip);
     b.connect_clicked(move |_| act());
     (widgets::row(title, desc, Some(b.upcast_ref())), b)
 }
@@ -37,7 +37,7 @@ fn action_row(title: &str, desc: &str, icon: &str, tip: &str, act: impl Fn() + '
 /// A row for something that can't come back: the first click arms the button (its
 /// tooltip says to click again), the second acts; it disarms after 4 s.
 fn armed_row(title: &str, desc: &str, icon: &str, tip: &'static str, act: impl Fn() + 'static) -> gtk::Box {
-    let b = nixe_ui::widgets::icon_button(icon, tip);
+    let b = nyx_ui::widgets::icon_button(icon, tip);
     let armed = std::rc::Rc::new(std::cell::Cell::new(false));
     b.connect_clicked(move |b| {
         if armed.replace(!armed.get()) {
@@ -129,19 +129,19 @@ fn build(page: &Page) {
         "Watch-state reconciliation",
         "Keep states separate, or review conflicts and choose a source before copying.",
         options,
-        if p.reconciliation == nixe_media_model::Reconciliation::Manual { "manual" } else { "disabled" },
+        if p.reconciliation == nyx_media_model::Reconciliation::Manual { "manual" } else { "disabled" },
         |value| {
             prefs::update(|p| {
                 p.reconciliation = if value == "manual" {
-                    nixe_media_model::Reconciliation::Manual
+                    nyx_media_model::Reconciliation::Manual
                 } else {
-                    nixe_media_model::Reconciliation::Disabled
+                    nyx_media_model::Reconciliation::Disabled
                 }
             })
         },
     );
     choice.connect_selected_notify(|_| {
-        if prefs::get().reconciliation == nixe_media_model::Reconciliation::Disabled {
+        if prefs::get().reconciliation == nyx_media_model::Reconciliation::Disabled {
             crate::reconcile::cancel()
         }
     });
@@ -153,9 +153,9 @@ fn build(page: &Page) {
         "Review watch state",
         crate::reconcile::open,
     );
-    button.set_sensitive(p.reconciliation == nixe_media_model::Reconciliation::Manual);
+    button.set_sensitive(p.reconciliation == nyx_media_model::Reconciliation::Manual);
     choice.connect_selected_notify(move |_| {
-        button.set_sensitive(prefs::get().reconciliation == nixe_media_model::Reconciliation::Manual)
+        button.set_sensitive(prefs::get().reconciliation == nyx_media_model::Reconciliation::Manual)
     });
     servers.add(&row);
     metadata_settings(page);
@@ -200,7 +200,7 @@ fn build(page: &Page) {
     let options: Vec<(String, String)> = app_themes.iter().map(|t| (t.id.clone(), t.name.clone())).collect();
     let (theme_row, theme_dd) = widgets::choice_row(
         "Theme",
-        "Dracula, Catppuccin, Tokyo Night, One Dark Pro and more. Add your own in <tt>~/.config/nixe-theater/themes</tt>.",
+        "Dracula, Catppuccin, Tokyo Night, One Dark Pro and more. Add your own in <tt>~/.config/nyx-theater/themes</tt>.",
         options,
         &p.theme,
         |id| {
@@ -394,7 +394,7 @@ fn metadata_credentials(provider: &'static str) {
     let weak = dialog.downgrade();
     remove.connect_clicked(move |_| {
         let weak = weak.clone();
-        nixe_core::cmd::background(
+        nyx_core::cmd::background(
             move || crate::credentials::delete_for(provider, "metadata"),
             move |result| match result {
                 Ok(()) => {
@@ -413,7 +413,7 @@ fn metadata_credentials(provider: &'static str) {
     save.add_css_class("suggested-action");
     let weak = dialog.downgrade();
     save.connect_clicked(move |button| {
-        let secret = match nixe_media_model::Secret::new(entry.text().trim().into()) {
+        let secret = match nyx_media_model::Secret::new(entry.text().trim().into()) {
             Ok(s) => s,
             Err(e) => {
                 message.set_text(&e.to_string());
@@ -425,7 +425,7 @@ fn metadata_credentials(provider: &'static str) {
         let weak = weak.clone();
         let button = button.downgrade();
         let message = message.downgrade();
-        nixe_core::cmd::background(
+        nyx_core::cmd::background(
             move || crate::credentials::save_for(provider, "metadata", &secret),
             move |result| match result {
                 Ok(()) => {

@@ -5,8 +5,8 @@ use crate::{
     window,
 };
 use gtk::{glib, prelude::*};
-use nixe_jellyfin::Client;
-use nixe_media_model::*;
+use nyx_jellyfin::Client;
+use nyx_media_model::*;
 use std::{
     cell::RefCell,
     sync::{
@@ -59,7 +59,7 @@ pub fn connection_state() -> crate::servers::ConnectionState {
         } else {
             "Jellyfin is offline · cached titles remain available".into()
         };
-        crate::servers::ConnectionState { provider: nixe_media_model::ProviderKind::Jellyfin, connected, busy: s.busy, message }
+        crate::servers::ConnectionState { provider: nyx_media_model::ProviderKind::Jellyfin, connected, busy: s.busy, message }
     })
 }
 fn begin() -> (u64, Arc<AtomicBool>) {
@@ -112,14 +112,14 @@ pub fn refresh() {
 /// removed and only a full fetch will do. Jellyfin counts a library's titles as one kind.
 fn incremental(
     client: &Client,
-    cache: &nixe_media_cache::Cache,
+    cache: &nyx_media_cache::Cache,
     library: &Library,
-    marks: &nixe_media_cache::SyncMarks,
+    marks: &nyx_media_cache::SyncMarks,
     since: i64,
     cancelled: &AtomicBool,
 ) -> Result<Option<crate::sync::Synced>, ProviderError> {
     let mut changed = vec![];
-    for field in [nixe_jellyfin::ChangeField::Metadata, nixe_jellyfin::ChangeField::Watched] {
+    for field in [nyx_jellyfin::ChangeField::Metadata, nyx_jellyfin::ChangeField::Watched] {
         let mut next = None;
         loop {
             if cancelled.load(Ordering::Relaxed) {
@@ -227,7 +227,7 @@ fn sync(full: bool) {
                 let _ = cache.set_sync_marks(
                     client.server_id(),
                     &library.id,
-                    &nixe_media_cache::SyncMarks { synced_at: sync_started, full_at, counts },
+                    &nyx_media_cache::SyncMarks { synced_at: sync_started, full_at, counts },
                 );
                 all.extend(items);
             }
@@ -312,7 +312,7 @@ fn sync(full: bool) {
 pub fn disconnect() {
     let Some(settings) = prefs::get().jellyfin else { return };
     let (generation, _) = begin();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || credentials::delete_for("jellyfin", &settings.address),
         move |result| {
             if STATE.with(|s| s.borrow().generation) != generation {
@@ -338,8 +338,8 @@ pub fn disconnect() {
 }
 fn settings_server() -> ServerId {
     // Settings can be gone by the time a worker reports back; no server is no match.
-    prefs::get().jellyfin.map(|j| j.server).unwrap_or_else(|| nixe_media_model::ServerId {
-        provider: nixe_media_model::ProviderKind::Jellyfin,
+    prefs::get().jellyfin.map(|j| j.server).unwrap_or_else(|| nyx_media_model::ServerId {
+        provider: nyx_media_model::ProviderKind::Jellyfin,
         id: String::new(),
     })
 }
@@ -400,7 +400,7 @@ pub fn connect_dialog() {
         let alive = alive.clone();
         let weak = weak.clone();
         let device = prefs::get().client_id;
-        nixe_core::cmd::background(
+        nyx_core::cmd::background(
             move || {
                 let (client, token) = Client::authenticate(&address, &username, &secret, &device)?;
                 let libraries = client.list_libraries()?;
@@ -434,7 +434,7 @@ pub fn connect_dialog() {
                         });
                         STATE.with(|s| s.borrow_mut().client = Some(client));
                         dialog.close();
-                        nixe_ui::settings_card::close();
+                        nyx_ui::settings_card::close();
                         refresh();
                     }
                     Err(error) => {

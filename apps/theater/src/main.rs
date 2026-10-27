@@ -31,7 +31,7 @@ mod window;
 use gtk::{gio, glib, prelude::*};
 
 fn main() -> glib::ExitCode {
-    nixe_core::app::init(nixe_core::app::App { slug: "nixe-theater", name: "Theater" });
+    nyx_core::app::init(nyx_core::app::App { slug: "nyx-theater", name: "Theater" });
     if prefs::get().client_id.is_empty() {
         prefs::update(|p| p.client_id = uuid::Uuid::new_v4().to_string());
         prefs::flush();
@@ -43,15 +43,15 @@ fn main() -> glib::ExitCode {
     }
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("Usage: nixe-theater [--section home|discover|movies|tv|collections|playlists|settings] [--toggle] [FILE|URI …]");
+        println!("Usage: nyx-theater [--section home|discover|movies|tv|collections|playlists|settings] [--toggle] [FILE|URI …]");
         return glib::ExitCode::SUCCESS;
     }
     let app = gtk::Application::builder()
-        .application_id("io.github.design_nexus.nixe.Theater")
+        .application_id("io.github.design_nexus.nyx.Theater")
         .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)
         .build();
-    // Nixe Assistant finds and plays titles through this (primary instance only).
-    app.connect_startup(|app| nixe_core::control::serve(app, control::tools(), control::handle));
+    // Nyx Assistant finds and plays titles through this (primary instance only).
+    app.connect_startup(|app| nyx_core::control::serve(app, control::tools(), control::handle));
     app.connect_command_line(|app, cl| {
         let argv: Vec<String> = cl.arguments().iter().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
         if argv.iter().any(|a| a == "--toggle")

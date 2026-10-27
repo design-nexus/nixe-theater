@@ -3,7 +3,7 @@ use crate::{
     prefs, widgets, window,
 };
 use gtk::prelude::*;
-use nixe_media_model::ProviderError;
+use nyx_media_model::ProviderError;
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeSet, HashMap},
@@ -49,7 +49,7 @@ pub fn controls(page: &'static str, toolbar: &gtk::Box) -> gtk::FlowBox {
         }
     });
     toolbar.append(&reverse);
-    toolbar.append(&nixe_ui::chrome::status_action("media-playlist-shuffle-symbolic", "Reshuffle", move || {
+    toolbar.append(&nyx_ui::chrome::status_action("media-playlist-shuffle-symbolic", "Reshuffle", move || {
         update(page, |s| {
             s.shuffle = s.shuffle.wrapping_add(1);
             s.sort = "shuffle".into();
@@ -58,7 +58,7 @@ pub fn controls(page: &'static str, toolbar: &gtk::Box) -> gtk::FlowBox {
     let button = widgets::labeled_button("theater-filter-symbolic", "Filter");
     button.connect_clicked(move |_| open(page));
     toolbar.append(&button);
-    toolbar.append(&nixe_ui::chrome::status_action("starred-symbolic", "Saved views", move || saved(page)));
+    toolbar.append(&nyx_ui::chrome::status_action("starred-symbolic", "Saved views", move || saved(page)));
     let chips = gtk::FlowBox::new();
     chips.set_selection_mode(gtk::SelectionMode::None);
     chips.set_column_spacing(6);
@@ -118,7 +118,7 @@ pub fn sync(page: &str) {
                 c.chips.insert(&button, -1);
             }
             if state.filter != Filter::default() {
-                let clear = nixe_ui::widgets::icon_button("edit-clear-all-symbolic", "Clear all filters");
+                let clear = nyx_ui::widgets::icon_button("edit-clear-all-symbolic", "Clear all filters");
                 let p = page.to_owned();
                 clear.connect_clicked(move |_| update(&p, |s| s.filter = Filter::default()));
                 c.chips.insert(&clear, -1);
@@ -127,7 +127,7 @@ pub fn sync(page: &str) {
     });
     UPDATING.with(|u| u.set(false));
 }
-fn values(items: &[nixe_media_model::MediaItem], field: &str) -> Vec<String> {
+fn values(items: &[nyx_media_model::MediaItem], field: &str) -> Vec<String> {
     let mut set = BTreeSet::new();
     for i in items {
         let m = &i.metadata;
@@ -257,7 +257,7 @@ fn facet(body: &gtk::Box, label: &str, mut options: Vec<String>, current: &[Stri
             let caption = caption.downgrade();
             let checks = checks.downgrade();
             let search = search.clone();
-            nixe_core::cmd::background(
+            nyx_core::cmd::background(
                 move || {
                     let mut names = BTreeSet::new();
                     for client in clients {
@@ -358,7 +358,7 @@ fn choices(v: &[&str]) -> Vec<String> {
 pub fn open(page: &str) {
     let page = page.to_owned();
     let snapshot = crate::catalog::snapshot();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let mut items: Vec<_> = snapshot.items().cloned().collect();
             for i in &mut items {
@@ -535,7 +535,7 @@ pub fn apply_state(page: String, mut state: State) {
     }
     window::status("Loading playlist membership…");
     let clients = crate::servers::clients();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let selected = &state.filter.playlists;
             let mut members = vec![];
@@ -582,7 +582,7 @@ pub fn apply_state(page: String, mut state: State) {
 }
 fn saved(page: &str) {
     let page = page.to_owned();
-    nixe_core::cmd::background(crate::metadata::saved_views, move |result| {
+    nyx_core::cmd::background(crate::metadata::saved_views, move |result| {
         let (dialog, body) = widgets::dialog("Saved library views", 480);
         let name = gtk::Entry::new();
         name.set_placeholder_text(Some("Name this view"));
@@ -597,7 +597,7 @@ fn saved(page: &str) {
                 return;
             }
             let view = SavedView { name, page: p.clone(), state: prefs::browse_state(&p) };
-            nixe_core::cmd::background(
+            nyx_core::cmd::background(
                 move || crate::metadata::save_view(&view),
                 |r| {
                     if let Err(e) = r {
@@ -632,7 +632,7 @@ fn saved(page: &str) {
                     delete.connect_clicked(move |_| {
                         let name = view.name.clone();
                         let weak = weak.clone();
-                        nixe_core::cmd::background(
+                        nyx_core::cmd::background(
                             move || crate::metadata::delete_view(&name),
                             move |r| match r {
                                 Ok(()) => {

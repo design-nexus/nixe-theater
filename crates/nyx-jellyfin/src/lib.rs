@@ -1,7 +1,7 @@
 //! Jellyfin transport. No authenticated URLs, response bodies or tokens in errors.
 mod metadata;
-pub use nixe_media_model::Secret;
-use nixe_media_model::*;
+pub use nyx_media_model::Secret;
+use nyx_media_model::*;
 use reqwest::{
     blocking::{Client as Http, Response},
     header::{HeaderMap, HeaderValue},
@@ -415,7 +415,7 @@ impl Client {
         } else {
             version.part_durations_ms.clone()
         };
-        let (index, start, total) = nixe_media_model::parts::locate(&durations, request.position_ms)?;
+        let (index, start, total) = nyx_media_model::parts::locate(&durations, request.position_ms)?;
         let (part_id, source_id) = version.parts.get(index).and_then(|part| part.split_once('/')).ok_or_else(invalid)?;
         let part = PlaybackRequest {
             item: ItemId { server: self.server.clone(), id: part_id.into() },
@@ -1079,7 +1079,7 @@ mod tests {
         item["IndexNumber"] = json!(2);
         let episode = parse_item(&item, client.server_id(), "").unwrap();
         assert_eq!(episode.tv.series_title.as_deref(), Some("Show"));
-        assert_eq!(nixe_media_model::tv::posters(&episode)[0], format!("Items/{LIBRARY}/Images/Primary"));
+        assert_eq!(nyx_media_model::tv::posters(&episode)[0], format!("Items/{LIBRARY}/Images/Primary"));
         let mut foreign = page.items[0].id.clone();
         foreign.server.id = "another".into();
         assert!(client.playlist_items(&foreign, None).is_err());

@@ -1,6 +1,6 @@
 use crate::{playback::Playback, prefs, settings, widgets};
 use gtk::{gdk, glib, prelude::*};
-use nixe_ui::{chrome, settings_card};
+use nyx_ui::{chrome, settings_card};
 use std::{cell::RefCell, rc::Rc};
 
 struct Ui {
@@ -20,7 +20,7 @@ thread_local! {
     static UP_NEXT: RefCell<Option<(gtk::Box, glib::SourceId)>> = const { RefCell::new(None) };
     static UI: RefCell<Option<Ui>> = const { RefCell::new(None) };
     static NAV_HISTORY: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-    static NAV_FORWARD: RefCell<Vec<(String, Option<nixe_media_model::MediaItem>)>> = const { RefCell::new(Vec::new()) };
+    static NAV_FORWARD: RefCell<Vec<(String, Option<nyx_media_model::MediaItem>)>> = const { RefCell::new(Vec::new()) };
     static SEARCH_ORIGIN: RefCell<String> = RefCell::new(String::from("home"));
     static SEARCH_CLEARING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static CLOSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -46,7 +46,7 @@ pub fn status(text: &str) {
 const UP_NEXT_SECS: u32 = 10;
 
 /// Offer `next` over the player: it plays when the countdown ends, or now, or not at all.
-pub fn show_up_next(next: nixe_media_model::MediaItem) {
+pub fn show_up_next(next: nyx_media_model::MediaItem) {
     cancel_up_next();
     let Some(overlay) = overlay() else { return };
     let card = widgets::hbox(10);
@@ -65,8 +65,8 @@ pub fn show_up_next(next: nixe_media_model::MediaItem) {
     let count = widgets::label(&format!("Plays in {UP_NEXT_SECS} s"), "dim");
     text.append(&count);
     card.append(&text);
-    let play = nixe_ui::widgets::icon_button("media-skip-forward-symbolic", "Play it now");
-    let stop = nixe_ui::widgets::icon_button("window-close-symbolic", "Don't play it");
+    let play = nyx_ui::widgets::icon_button("media-skip-forward-symbolic", "Play it now");
+    let stop = nyx_ui::widgets::icon_button("window-close-symbolic", "Don't play it");
     card.append(&play);
     card.append(&stop);
     overlay.add_overlay(&card);
@@ -111,11 +111,11 @@ pub fn build(app: &gtk::Application) {
         gtk::ApplicationWindow::builder().application(app).title("Theater").default_width(1120).default_height(800).build();
     window.add_css_class("theater-window");
     window.add_css_class("playback-window");
-    window.set_icon_name(Some("io.github.design_nexus.nixe.Theater"));
+    window.set_icon_name(Some("io.github.design_nexus.nyx.Theater"));
     window.set_titlebar(Some(&gtk::Box::new(gtk::Orientation::Horizontal, 0)));
-    nixe_ui::keys::install(
+    nyx_ui::keys::install(
         &window,
-        nixe_ui::keys::Common {
+        nyx_ui::keys::Common {
             settings: Some(settings::open),
             shortcuts: Some(show_shortcuts),
             close: true,
@@ -218,9 +218,9 @@ pub fn build(app: &gtk::Application) {
     mini_title.set_max_width_chars(20);
     let mini_progress = gtk::ProgressBar::new();
     mini_progress.set_size_request(100, -1);
-    let mini_back = nixe_ui::widgets::icon_button("media-seek-backward-symbolic", "Seek back");
-    let mini_play = nixe_ui::widgets::icon_button("media-playback-pause-symbolic", "Play or pause");
-    let mini_fwd = nixe_ui::widgets::icon_button("media-seek-forward-symbolic", "Seek forward");
+    let mini_back = nyx_ui::widgets::icon_button("media-seek-backward-symbolic", "Seek back");
+    let mini_play = nyx_ui::widgets::icon_button("media-playback-pause-symbolic", "Play or pause");
+    let mini_fwd = nyx_ui::widgets::icon_button("media-seek-forward-symbolic", "Seek forward");
     for (button, direction) in [(&mini_back, -1.0), (&mini_fwd, 1.0)] {
         let player = player.clone();
         button.connect_clicked(move |_| player.borrow().seek_by(direction * prefs::get().seek_seconds as f64));
@@ -400,9 +400,9 @@ pub fn build(app: &gtk::Application) {
         status("Settings could not be read. Defaults are in use; a backup was kept.");
     }
     // The first database initialization stays off GTK, as future provider jobs will.
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         || {
-            nixe_media_cache::Cache::open(&nixe_core::paths::cache_dir().join("library.sqlite3"))
+            nyx_media_cache::Cache::open(&nyx_core::paths::cache_dir().join("library.sqlite3"))
                 .map(|_| ())
                 .map_err(|_| "Metadata cache is unavailable")
         },
@@ -674,7 +674,7 @@ pub fn now_playing() -> Option<(String, f64, f64, bool)> {
     })
 }
 
-/// Work the player from outside the window (Nixe Assistant).
+/// Work the player from outside the window (Nyx Assistant).
 pub fn control(action: &str, seconds: f64) -> Result<(), String> {
     let player = UI.with(|u| u.borrow().as_ref().map(|u| u.player.clone())).ok_or("Theater isn't open")?;
     if !player.borrow().has_video() {
@@ -730,8 +730,8 @@ pub fn leave_fullscreen() {
 }
 
 pub fn play_remote(
-    source: nixe_media_model::PlaybackSource,
-    item: nixe_media_model::MediaItem,
+    source: nyx_media_model::PlaybackSource,
+    item: nyx_media_model::MediaItem,
     client: crate::servers::Client,
     resume_ms: u64,
     version: String,
@@ -754,7 +754,7 @@ pub fn play_remote(
         Ok(()) => {
             status(&format!(
                 "{label} · {}",
-                if mode == nixe_media_model::PlaybackMode::Transcode { "Transcoding" } else { "Direct Play" }
+                if mode == nyx_media_model::PlaybackMode::Transcode { "Transcoding" } else { "Direct Play" }
             ));
             navigate("playing");
         }
@@ -762,7 +762,7 @@ pub fn play_remote(
     }
 }
 
-pub fn begin_playback_request(server: nixe_media_model::ServerId) -> Option<u64> {
+pub fn begin_playback_request(server: nyx_media_model::ServerId) -> Option<u64> {
     if crate::reconcile::busy() {
         status("Wait for the watch-state update to finish before starting playback.");
         return None;
@@ -772,7 +772,7 @@ pub fn begin_playback_request(server: nixe_media_model::ServerId) -> Option<u64>
     Some(request)
 }
 
-pub fn stop_server(server: &nixe_media_model::ServerId) {
+pub fn stop_server(server: &nyx_media_model::ServerId) {
     crate::library::clear_fallback();
     crate::playlists::clear_queue();
     crate::reconcile::cancel();
@@ -786,6 +786,6 @@ pub fn accepts_playback_request(request: u64) -> bool {
     UI.with(|u| u.borrow().as_ref().is_some_and(|u| u.player.borrow().accepts_request(request)))
 }
 
-pub fn server_playing(server: &nixe_media_model::ServerId) -> bool {
+pub fn server_playing(server: &nyx_media_model::ServerId) -> bool {
     UI.with(|u| u.borrow().as_ref().is_some_and(|u| u.player.borrow().uses_server(server)))
 }

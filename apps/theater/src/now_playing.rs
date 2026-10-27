@@ -1,7 +1,7 @@
 //! Media Player's shared controls, wired to Theater's player session.
 use crate::{playback::Playback, prefs, widgets, window};
 use gtk::{glib, prelude::*};
-use nixe_playback::controls::{self, OsdControls, SeekWidgets, choice, fill_menu};
+use nyx_playback::controls::{self, OsdControls, SeekWidgets, choice, fill_menu};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -15,7 +15,7 @@ pub fn build(player: &Rc<RefCell<Playback>>) -> gtk::Overlay {
     overlay.set_vexpand(true);
     overlay.set_hexpand(true);
     overlay.set_overflow(gtk::Overflow::Hidden);
-    let picture = gtk::Picture::for_paintable(&nixe_playback::video::paintable());
+    let picture = gtk::Picture::for_paintable(&nyx_playback::video::paintable());
     picture.set_content_fit(gtk::ContentFit::Contain);
     picture.set_can_shrink(true);
     picture.set_hexpand(true);

@@ -1,7 +1,7 @@
 //! Plex transport. Errors never expose URLs, credentials, response bodies or TLS diagnostics.
 //! Synchronous methods run on app workers; MediaProvider futures use a blocking pool.
 mod metadata;
-use nixe_media_model::*;
+use nyx_media_model::*;
 use reqwest::{
     blocking::{Client as Http, Response},
     header::{HeaderMap, HeaderValue},
@@ -14,7 +14,7 @@ use url::Url;
 type Result<T> = std::result::Result<T, ProviderError>;
 const PAGE_SIZE: usize = 100;
 const MAX_BODY: u64 = 16 * 1024 * 1024;
-pub use nixe_media_model::Secret;
+pub use nyx_media_model::Secret;
 fn http() -> Result<Http> {
     Http::builder()
         .connect_timeout(Duration::from_secs(5))
@@ -485,7 +485,7 @@ impl Client {
         }
         let durations: Vec<_> =
             if version.parts.len() == 1 { vec![item.duration_ms.unwrap_or(1).max(1)] } else { version.part_durations_ms.clone() };
-        let (index, start, total) = nixe_media_model::parts::locate(&durations, request.position_ms)?;
+        let (index, start, total) = nyx_media_model::parts::locate(&durations, request.position_ms)?;
         if durations.len() != version.parts.len() {
             return Err(ProviderError::InvalidResponse);
         }
@@ -929,7 +929,7 @@ mod tests {
         let value = serde_json::json!({"type":"episode","ratingKey":"321","title":"Pilot","grandparentTitle":"Show","parentIndex":1,"index":2,"parentThumb":"/library/metadata/2/thumb/1","grandparentThumb":"/library/metadata/3/thumb/1","thumb":"/library/metadata/321/thumb/1"});
         let episode = parse_item(&value, client.server_id(), "1").unwrap();
         assert_eq!(episode.tv.series_title.as_deref(), Some("Show"));
-        assert_eq!(nixe_media_model::tv::posters(&episode)[0], "/library/metadata/2/thumb/1");
+        assert_eq!(nyx_media_model::tv::posters(&episode)[0], "/library/metadata/2/thumb/1");
         server.join().unwrap();
     }
     #[test]

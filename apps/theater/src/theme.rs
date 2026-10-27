@@ -1,15 +1,15 @@
-//! Theming: the shared Nixe theme engine, given this app's stylesheet.
+//! Theming: the shared Nyx theme engine, given this app's stylesheet.
 
-pub use nixe_theme::*;
+pub use nyx_theme::*;
 
 use crate::prefs;
 
 /// Install the stylesheet and the current palette, and follow Omarchy live.
 pub fn install() {
-    nixe_theme::install(Style {
+    nyx_theme::install(Style {
         window_class: "theater-window",
         base_skip: &[".tag"],
-        css: nixe_playback::controls::stylesheet(include_str!("style.css")),
+        css: nyx_playback::controls::stylesheet(include_str!("style.css")),
         no_glow_css: "\n.osd-controls { box-shadow: 0 4px 16px alpha(@theme_shadow, 0.5); }\n",
         extra_colors: Some(video_colors),
         prefs: || {

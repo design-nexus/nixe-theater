@@ -1,8 +1,8 @@
 //! Native details and person pages, using the suite's cards and artwork widgets.
 use crate::{library, metadata, prefs, servers, widgets, window};
 use gtk::{glib, prelude::*};
-use nixe_media_model::*;
-use nixe_ui::media::Artwork;
+use nyx_media_model::*;
+use nyx_ui::media::Artwork;
 fn prose(body: &gtk::Box, text: &str, class: &str) {
     if text.is_empty() {
         return;
@@ -240,7 +240,7 @@ pub fn people(body: &gtk::Box, i: &MediaItem) {
         if let Some(path) = &credit.photo {
             photo(&art, path, Some(i));
         }
-        let card = nixe_ui::media::PosterCard::new(&art.root, 112);
+        let card = nyx_ui::media::PosterCard::new(&art.root, 112);
         card.title.set_text(&credit.name);
         card.meta.set_text(&credit.role);
         card.title.set_tooltip_text(Some(&credit.name));
@@ -296,7 +296,7 @@ pub fn television(body: &gtk::Box, i: &MediaItem, children: &[MediaItem]) {
     episodes.sort_by_key(|e| (e.season_number, e.episode_number));
     if let Some(next) = episodes.first() {
         let row = widgets::hbox(4);
-        let play = nixe_ui::widgets::icon_button("media-playback-start-symbolic", "Play next unwatched episode");
+        let play = nyx_ui::widgets::icon_button("media-playback-start-symbolic", "Play next unwatched episode");
         let episode = next.clone();
         play.connect_clicked(move |_| { library::play_item(&episode, false); });
         row.append(&play);
@@ -319,7 +319,7 @@ pub fn related(body: &gtk::Box, i: &MediaItem) {
     let generation = library::detail_generation();
     let item = i.clone();
     let snapshot = crate::catalog::snapshot();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || related_rows(&item, snapshot.items().cloned().collect()),
         move |rows| {
             if library::detail_generation() != generation {
@@ -344,7 +344,7 @@ fn related_rows(i: &MediaItem, mut all: Vec<MediaItem>) -> Vec<(String, Vec<Medi
         _ => None,
     };
     let current = parent.as_ref().and_then(|id| all.iter().find(|s| &s.id == id)).unwrap_or(i);
-    let groups = nixe_media_model::index::unify(all.clone());
+    let groups = nyx_media_model::index::unify(all.clone());
     let excluded: std::collections::HashSet<_> = groups
         .iter()
         .filter(|g| g.sources.iter().any(|s| s.id == current.id || s.id == i.id))
@@ -470,13 +470,13 @@ fn person(credit: Credit, origin: MediaItem) {
     body.append(&info);
     let name = credit.name.clone();
     let snapshot = crate::catalog::snapshot();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let mut items: Vec<_> = snapshot.items().cloned().collect();
             for i in &mut items {
                 metadata::apply(i);
             }
-            let mut owned: Vec<_> = nixe_media_model::index::unify(items)
+            let mut owned: Vec<_> = nyx_media_model::index::unify(items)
                 .into_iter()
                 .filter_map(|g| g.sources.into_iter().next())
                 .filter(|i| {
@@ -500,7 +500,7 @@ fn person(credit: Credit, origin: MediaItem) {
     let config = prefs::metadata_config();
     let weak = info.downgrade();
     let snapshot = crate::catalog::snapshot();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let mut person = metadata::person(id, config)?;
             let mut seen = std::collections::HashSet::new();
@@ -566,7 +566,7 @@ fn filmography(body: &gtk::Box, titles: std::rc::Rc<Vec<(RelatedTitle, Option<Me
         }
     }
     if end < titles.len() {
-        let more = nixe_ui::widgets::icon_button("view-more-horizontal-symbolic", &format!("Show {} more", titles.len() - end));
+        let more = nyx_ui::widgets::icon_button("view-more-horizontal-symbolic", &format!("Show {} more", titles.len() - end));
         let weak = body.downgrade();
         more.connect_clicked(move |button| {
             if let Some(body) = weak.upgrade() {
@@ -592,7 +592,7 @@ mod related_tests {
         if actor {
             value["Role"] = serde_json::json!([{"tag":"Actor","role":"Character"}]);
         }
-        nixe_plex::parse_item(&value, &server, "1").unwrap()
+        nyx_plex::parse_item(&value, &server, "1").unwrap()
     }
     #[test]
     fn more_with_promotes_episodes_and_excludes_every_copy_of_current_series() {

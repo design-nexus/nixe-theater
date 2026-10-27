@@ -1,12 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["apps/theater", "crates/nixe-media-model", "crates/nixe-media-cache", "crates/nixe-plex", "crates/nixe-jellyfin"]
+members = ["apps/theater", "crates/nyx-media-model", "crates/nyx-media-cache", "crates/nyx-plex", "crates/nyx-jellyfin"]
 
 [workspace.package]
 edition = "2024"
 license = "MIT"
 authors = ["Ken Smith"]
-repository = "https://github.com/design-nexus/nixe-theater"
+repository = "https://github.com/design-nexus/nyx-theater"
 
 [profile.release]
 lto = "thin"

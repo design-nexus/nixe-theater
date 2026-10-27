@@ -35,7 +35,7 @@ pub fn install(window: &gtk::ApplicationWindow) {
         }
         let Some(window) = weak.upgrade() else { return glib::Propagation::Proceed };
         let mut swipe = s.borrow_mut();
-        if crate::window::page() == "playing" || window.is_fullscreen() || nixe_ui::settings_card::is_open() {
+        if crate::window::page() == "playing" || window.is_fullscreen() || nyx_ui::settings_card::is_open() {
             swipe.blocked = true;
             return glib::Propagation::Proceed;
         }

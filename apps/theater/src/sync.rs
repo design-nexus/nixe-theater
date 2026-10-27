@@ -3,8 +3,8 @@
 //! don't show up as changes, so the server's counts are compared with what the last sync
 //! counted plus what's new; any difference, a manual refresh, or a day since the last
 //! full sync fetches the whole library again.
-use nixe_media_cache::SyncMarks;
-use nixe_media_model::{ItemId, MediaItem};
+use nyx_media_cache::SyncMarks;
+use nyx_media_model::{ItemId, MediaItem};
 use std::collections::HashMap;
 
 /// The longest a library goes without a full sync.
@@ -72,7 +72,7 @@ pub fn now_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nixe_media_model::{MediaKind, ProviderKind, ServerId};
+    use nyx_media_model::{MediaKind, ProviderKind, ServerId};
 
     fn item(id: &str, kind: MediaKind, title: &str) -> MediaItem {
         MediaItem {

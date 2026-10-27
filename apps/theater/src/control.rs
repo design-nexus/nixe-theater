@@ -1,10 +1,10 @@
-//! Theater's tools on the control interface (`nixe_core::control`), for Nixe Assistant:
+//! Theater's tools on the control interface (`nyx_core::control`), for Nyx Assistant:
 //! find titles, see what's in progress and what's playing, play, control playback, and
 //! mark something watched. Ids are opaque strings from `theater.search`.
 
 use crate::{library, servers, window};
-use nixe_core::control::text;
-use nixe_media_model::{ItemId, MediaItem, MediaKind};
+use nyx_core::control::text;
+use nyx_media_model::{ItemId, MediaItem, MediaKind};
 use serde_json::{Value, json};
 
 pub fn tools() -> Value {

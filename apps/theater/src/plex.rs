@@ -5,8 +5,8 @@ use crate::{
     window,
 };
 use gtk::{gio, glib, prelude::*};
-use nixe_media_model::{MediaItem, MediaKind, ProviderError};
-use nixe_plex::{Client, Secret};
+use nyx_media_model::{MediaItem, MediaKind, ProviderError};
+use nyx_plex::{Client, Secret};
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -84,7 +84,7 @@ pub fn connection_state() -> crate::servers::ConnectionState {
         } else {
             "Plex is offline · cached titles remain available".into()
         };
-        crate::servers::ConnectionState { provider: nixe_media_model::ProviderKind::Plex, connected, busy: s.busy, message }
+        crate::servers::ConnectionState { provider: nyx_media_model::ProviderKind::Plex, connected, busy: s.busy, message }
     })
 }
 fn begin() -> (u64, Arc<AtomicBool>) {
@@ -110,8 +110,8 @@ fn finish(generation: u64) {
         }
     });
 }
-pub fn database() -> Result<nixe_media_cache::Cache, ProviderError> {
-    nixe_media_cache::Cache::open(&nixe_core::paths::cache_dir().join("library.sqlite3"))
+pub fn database() -> Result<nyx_media_cache::Cache, ProviderError> {
+    nyx_media_cache::Cache::open(&nyx_core::paths::cache_dir().join("library.sqlite3"))
         .map_err(|_| ProviderError::Failed("Metadata cache is unavailable".into()))
 }
 /// At startup: libraries synced recently fetch only what changed.
@@ -123,33 +123,33 @@ pub fn refresh() {
     sync(true);
 }
 /// The kinds a library's titles are counted by: (`type` for Plex, kind).
-fn kinds(library: &nixe_media_model::Library) -> &'static [(Option<&'static str>, MediaKind)] {
+fn kinds(library: &nyx_media_model::Library) -> &'static [(Option<&'static str>, MediaKind)] {
     if library.kind == MediaKind::Series {
         &[(None, MediaKind::Series), (Some("3"), MediaKind::Season), (Some("4"), MediaKind::Episode)]
     } else {
         &[(None, MediaKind::Movie)]
     }
 }
-fn kind_of(library: &nixe_media_model::Library, item: &MediaItem) -> Option<usize> {
+fn kind_of(library: &nyx_media_model::Library, item: &MediaItem) -> Option<usize> {
     kinds(library).iter().position(|(_, kind)| *kind == item.kind)
 }
-fn counts(client: &Client, library: &nixe_media_model::Library) -> Result<Vec<u64>, ProviderError> {
+fn counts(client: &Client, library: &nyx_media_model::Library) -> Result<Vec<u64>, ProviderError> {
     kinds(library).iter().map(|(kind, _)| client.count(&library.id, *kind)).collect()
 }
 /// What changed in `library` since `since`, over its snapshot; None when something was
 /// removed and only a full fetch will do.
 fn incremental(
     client: &Client,
-    cache: &nixe_media_cache::Cache,
-    library: &nixe_media_model::Library,
-    marks: &nixe_media_cache::SyncMarks,
+    cache: &nyx_media_cache::Cache,
+    library: &nyx_media_model::Library,
+    marks: &nyx_media_cache::SyncMarks,
     since: i64,
     cancelled: &AtomicBool,
     publish: &mut impl FnMut(Vec<MediaItem>) -> Result<(), ProviderError>,
 ) -> Result<Option<crate::sync::Synced>, ProviderError> {
     let mut changed = Vec::new();
     for (kind, _) in kinds(library) {
-        for field in [nixe_plex::ChangeField::Metadata, nixe_plex::ChangeField::Watched] {
+        for field in [nyx_plex::ChangeField::Metadata, nyx_plex::ChangeField::Watched] {
             let mut next = None;
             loop {
                 if cancelled.load(Ordering::Relaxed) {
@@ -196,7 +196,7 @@ fn incremental(
 fn rediscover(settings: &PlexSettings, client_id: &str) -> Option<Result<Client, ProviderError>> {
     let account = credentials::load_account().ok()?;
     Some((|| {
-        let (client, token) = nixe_plex::rediscover(client_id, &account, &settings.server.id)?;
+        let (client, token) = nyx_plex::rediscover(client_id, &account, &settings.server.id)?;
         credentials::save(&client.address(), &token)?;
         Ok(client)
     })())
@@ -248,7 +248,7 @@ enum RefreshEvent {
     /// A library that couldn't be loaded: its title and why.
     Skipped(String, String),
     Cached(Vec<MediaItem>),
-    Ready(Client, Vec<nixe_media_model::Library>),
+    Ready(Client, Vec<nyx_media_model::Library>),
     Batch(Vec<MediaItem>),
     Finished(Result<Vec<MediaItem>, ProviderError>),
 }
@@ -343,7 +343,7 @@ fn sync(full: bool) {
                 let _ = cache.set_sync_marks(
                     client.server_id(),
                     &library.id,
-                    &nixe_media_cache::SyncMarks { synced_at: sync_started, full_at, counts },
+                    &nyx_media_cache::SyncMarks { synced_at: sync_started, full_at, counts },
                 );
                 all.extend(items);
             }
@@ -465,7 +465,7 @@ pub fn disconnect() {
     let Some(settings) = prefs::get().plex else { return };
     let server = settings.server.clone();
     let (generation, _) = begin();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             // Signed out of the account too; there may be none (a manual connection).
             let _ = credentials::delete_account();
@@ -503,7 +503,7 @@ pub fn cancel() {
     });
 }
 
-type ConnectionResult = Result<(Client, Vec<nixe_media_model::Library>), ProviderError>;
+type ConnectionResult = Result<(Client, Vec<nyx_media_model::Library>), ProviderError>;
 struct LoginUi {
     dialog: glib::WeakRef<gtk::Window>,
     sign: glib::WeakRef<gtk::Button>,
@@ -514,7 +514,7 @@ struct LoginUi {
     token: gtk::PasswordEntry,
     message: gtk::Label,
     alive: Arc<AtomicBool>,
-    servers: RefCell<Vec<nixe_plex::DiscoveredServer>>,
+    servers: RefCell<Vec<nyx_plex::DiscoveredServer>>,
     account: RefCell<Option<Secret>>,
 }
 impl LoginUi {
@@ -613,7 +613,7 @@ pub fn connect_dialog() {
         }
     });
     manual.connect_clicked(move |_| {
-        let address = match nixe_plex::server_url(&ui.address.text()) {
+        let address = match nyx_plex::server_url(&ui.address.text()) {
             Ok(url) => url.to_string(),
             Err(e) => {
                 ui.message.set_text(&e.to_string());
@@ -653,7 +653,7 @@ fn connected(ui: std::rc::Rc<LoginUi>, result: ConnectionResult) {
             if let Some(dialog) = ui.dialog.upgrade() {
                 dialog.close();
             }
-            nixe_ui::settings_card::close();
+            nyx_ui::settings_card::close();
             refresh();
         }
         Err(error) => ui.busy(false, &error.to_string()),
@@ -674,7 +674,7 @@ fn prepare(client: Client, secret: Secret, account: Option<Secret>, alive: &Atom
 fn connect_manual(ui: std::rc::Rc<LoginUi>, address: String, token: Secret) {
     ui.busy(true, "Connecting to Plex…");
     let (client_id, alive, account) = (prefs::get().client_id, ui.alive.clone(), ui.account.borrow().clone());
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let client = Client::connect(&address, token.clone(), &client_id)?;
             prepare(client, token, account, &alive)
@@ -682,10 +682,10 @@ fn connect_manual(ui: std::rc::Rc<LoginUi>, address: String, token: Secret) {
         move |result| connected(ui, result),
     );
 }
-fn connect_discovered(ui: std::rc::Rc<LoginUi>, server: nixe_plex::DiscoveredServer) {
+fn connect_discovered(ui: std::rc::Rc<LoginUi>, server: nyx_plex::DiscoveredServer) {
     ui.busy(true, &format!("Connecting to {}…", server.name));
     let (client_id, alive, account) = (prefs::get().client_id, ui.alive.clone(), ui.account.borrow().clone());
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             if !alive.load(Ordering::Relaxed) {
                 return Err(ProviderError::Failed("Sign-in cancelled".into()));
@@ -699,8 +699,8 @@ fn connect_discovered(ui: std::rc::Rc<LoginUi>, server: nixe_plex::DiscoveredSer
 fn discover_servers(ui: std::rc::Rc<LoginUi>, secret: Secret) {
     ui.busy(true, "Finding your Plex servers…");
     let client_id = prefs::get().client_id;
-    nixe_core::cmd::background(
-        move || nixe_plex::discover(&client_id, &secret),
+    nyx_core::cmd::background(
+        move || nyx_plex::discover(&client_id, &secret),
         move |result| {
             if !ui.alive.load(Ordering::Relaxed) {
                 return;
@@ -741,8 +741,8 @@ fn web_login(ui: std::rc::Rc<LoginUi>, manual_address: Option<String>) {
     ui.busy(true, "Opening Plex sign-in in your browser…");
     let client_id = prefs::get().client_id;
     let worker_id = client_id.clone();
-    nixe_core::cmd::background(
-        move || nixe_plex::create_pin(&worker_id),
+    nyx_core::cmd::background(
+        move || nyx_plex::create_pin(&worker_id),
         move |result| {
             if !ui.alive.load(Ordering::Relaxed) {
                 return;
@@ -760,13 +760,13 @@ fn web_login(ui: std::rc::Rc<LoginUi>, manual_address: Option<String>) {
             }
             ui.message.set_text("Complete sign-in in your browser. Theater will continue automatically.");
             let alive = ui.alive.clone();
-            nixe_core::cmd::background(
+            nyx_core::cmd::background(
                 move || {
                     for _ in 0..180 {
                         if !alive.load(Ordering::Relaxed) {
                             return Err(ProviderError::Failed("Sign-in cancelled".into()));
                         }
-                        if let Some(token) = nixe_plex::check_pin(&client_id, &pin)? {
+                        if let Some(token) = nyx_plex::check_pin(&client_id, &pin)? {
                             return Ok(token);
                         }
                         std::thread::sleep(Duration::from_secs(1));

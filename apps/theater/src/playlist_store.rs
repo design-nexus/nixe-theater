@@ -1,5 +1,5 @@
 //! Durable user-created lists live under XDG data, never the disposable cache.
-use nixe_media_model::{ItemId, MediaItem, ProviderError};
+use nyx_media_model::{ItemId, MediaItem, ProviderError};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 type Result<T> = std::result::Result<T, ProviderError>;
@@ -39,7 +39,7 @@ impl Playlist {
 pub struct Store(Connection);
 impl Store {
     pub fn open() -> Result<Self> {
-        let dir = nixe_core::paths::data_dir();
+        let dir = nyx_core::paths::data_dir();
         std::fs::create_dir_all(&dir).map_err(|_| failure())?;
         Self::init(Connection::open(dir.join("playlists.sqlite3")).map_err(|_| failure())?)
     }

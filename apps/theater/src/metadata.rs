@@ -1,5 +1,5 @@
 //! Cached optional enrichment. No HTTP, keyring or SQLite work runs on GTK.
-use nixe_media_model::*;
+use nyx_media_model::*;
 use reqwest::blocking::Client;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
@@ -164,7 +164,7 @@ pub fn start(config: Config) -> async_channel::Receiver<()> {
     rx
 }
 fn cache_db() -> Option<Connection> {
-    let path = nixe_core::paths::cache_dir();
+    let path = nyx_core::paths::cache_dir();
     std::fs::create_dir_all(&path).ok()?;
     let db = Connection::open(path.join("enrichment.sqlite3")).ok()?;
     db.busy_timeout(Duration::from_secs(2)).ok()?;
@@ -172,7 +172,7 @@ fn cache_db() -> Option<Connection> {
     Some(db)
 }
 fn user_db() -> Result<Connection, ProviderError> {
-    let path = nixe_core::paths::data_dir();
+    let path = nyx_core::paths::data_dir();
     std::fs::create_dir_all(&path).map_err(|_| failure("Could not save your rating"))?;
     let db = Connection::open(path.join("library.sqlite3")).map_err(|_| failure("Could not save your rating"))?;
     db.busy_timeout(Duration::from_secs(2)).map_err(|_| failure("Library data is busy"))?;
@@ -181,7 +181,7 @@ fn user_db() -> Result<Connection, ProviderError> {
 }
 pub fn set_personal(i: MediaItem, rating: Option<u32>) {
     let id = key(&i);
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let db = user_db()?;
             if let Some(v) = rating.filter(|v| (50..=1000).contains(v) && v % 50 == 0) {
@@ -684,7 +684,7 @@ pub fn image(path: &str) -> Option<std::path::PathBuf> {
         return None;
     }
     use sha2::{Digest, Sha256};
-    let dir = nixe_core::paths::cache_dir().join("people-artwork");
+    let dir = nyx_core::paths::cache_dir().join("people-artwork");
     std::fs::create_dir_all(&dir).ok()?;
     let file = dir.join(format!("{:x}.jpg", Sha256::digest(path)));
     if file.exists() {
@@ -697,7 +697,7 @@ pub fn image(path: &str) -> Option<std::path::PathBuf> {
     if bytes.len() > 2 * 1024 * 1024 {
         return None;
     }
-    nixe_core::cmd::atomic_write(&file, bytes).ok()?;
+    nyx_core::cmd::atomic_write(&file, bytes).ok()?;
     Some(file)
 }
 #[cfg(test)]

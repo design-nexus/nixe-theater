@@ -1,7 +1,7 @@
 //! Explicit, per-conflict review. Never writes from indexing or playback callbacks.
 use crate::{prefs, servers, widgets, window};
 use gtk::{glib, prelude::*};
-use nixe_media_model::{
+use nyx_media_model::{
     index::unify,
     reconcile::{changed, desired, progress_compatible},
     *,
@@ -62,7 +62,7 @@ pub fn open() {
     let looking = widgets::label("Looking for titles whose watch state differs…", "dim");
     content.append(&looking);
     let items = servers::items();
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || unify(items),
         move |groups| {
             content.remove(&looking);
@@ -138,7 +138,7 @@ pub fn open() {
                                     (from.clone(), to.clone(), alive.clone(), message.clone(), weak_card.clone());
                                 let revision = servers::revision();
                                 let worker_job = job.clone();
-                                nixe_core::cmd::background(
+                                nyx_core::cmd::background(
                                     move || {
                                         let source = source_client.detail(&from.id)?;
                                         let target = client.detail(&to.id)?;

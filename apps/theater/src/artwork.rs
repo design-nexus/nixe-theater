@@ -1,8 +1,8 @@
 //! Bounded artwork workers and a disk budget; GTK only receives scaled image bytes.
 use crate::servers::Client;
 use gtk::{gdk, glib, prelude::*};
-use nixe_media_model::{ItemId, MediaItem, MediaKind, ProviderKind, ServerId};
-use nixe_ui::media::Artwork;
+use nyx_media_model::{ItemId, MediaItem, MediaKind, ProviderKind, ServerId};
+use nyx_ui::media::Artwork;
 use sha2::{Digest, Sha256};
 use std::{
     cell::RefCell,
@@ -157,7 +157,7 @@ fn enqueue_network(job: Job) {
 fn path(job: &Job) -> PathBuf {
     let hash = Sha256::digest(format!("{:?}\0{}\0{}\0{}", job.server, job.key, job.width, job.height));
     // JPEG unless the picture has transparency (PNG); the format is read from the data.
-    nixe_core::paths::cache_dir().join("artwork").join(format!("{hash:x}.img"))
+    nyx_core::paths::cache_dir().join("artwork").join(format!("{hash:x}.img"))
 }
 fn get(job: &Job) -> Option<Vec<u8>> {
     if let Some(group) = &job.group {
@@ -198,7 +198,7 @@ fn get_one(job: &Job) -> Option<Vec<u8>> {
     let temp = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
     std::fs::write(&temp, &bytes).ok()?;
     std::fs::rename(&temp, &path).ok()?;
-    if let Ok(cache) = nixe_media_cache::Cache::open(&nixe_core::paths::cache_dir().join("library.sqlite3")) {
+    if let Ok(cache) = nyx_media_cache::Cache::open(&nyx_core::paths::cache_dir().join("library.sqlite3")) {
         let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
         let _ = cache.index_artwork(
             &job.server,
@@ -217,7 +217,7 @@ fn get_one(job: &Job) -> Option<Vec<u8>> {
     Some(bytes)
 }
 fn trim() {
-    let dir = nixe_core::paths::cache_dir().join("artwork");
+    let dir = nyx_core::paths::cache_dir().join("artwork");
     let mut files: Vec<_> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
@@ -250,7 +250,7 @@ pub fn load_poster(art: &Artwork, item: &MediaItem, width: u32, height: u32) {
     if item.kind == MediaKind::Collection {
         load_group(art, &item.title, Some(item.id.clone()), false, item.poster.clone(), &[], width, height);
     } else {
-        load_keys(art, &item.id.server, nixe_media_model::tv::posters(item), width, height);
+        load_keys(art, &item.id.server, nyx_media_model::tv::posters(item), width, height);
     }
 }
 pub fn load_playlist(art: &Artwork, list: &crate::playlist_store::Playlist, width: u32, height: u32) {
@@ -313,7 +313,7 @@ fn load_group_named(
     let member_jobs = members
         .iter()
         .filter_map(|item| {
-            let mut keys = nixe_media_model::tv::posters(item);
+            let mut keys = nyx_media_model::tv::posters(item);
             if keys.is_empty() {
                 return None;
             }
@@ -440,7 +440,7 @@ fn group_image(job: &Job, group: &Group) -> Option<Vec<u8>> {
         let client = job.client.as_ref()?;
         let page = if group.playlist { client.playlist_items(id, None) } else { client.child_page(id, "", None) }.ok()?;
         for item in page.items.into_iter().take(12) {
-            let mut keys = nixe_media_model::tv::posters(&item);
+            let mut keys = nyx_media_model::tv::posters(&item);
             if keys.is_empty() {
                 continue;
             }
@@ -505,7 +505,7 @@ fn write_group(job: &Job, bytes: &[u8]) {
     let target = path(job);
     if let Some(parent) = target.parent() {
         let _ = std::fs::create_dir_all(parent);
-        let _ = nixe_core::cmd::atomic_write(&target, bytes);
+        let _ = nyx_core::cmd::atomic_write(&target, bytes);
     }
 }
 

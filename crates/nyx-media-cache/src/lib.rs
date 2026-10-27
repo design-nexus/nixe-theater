@@ -1,6 +1,6 @@
 //! Worker-owned metadata snapshots. Never store tokens or resolved stream URLs.
 use anyhow::{Context, Result, ensure};
-use nixe_media_model::{ItemId, MediaItem, ServerId};
+use nyx_media_model::{ItemId, MediaItem, ServerId};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 
@@ -275,7 +275,7 @@ impl Cache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nixe_media_model::*;
+    use nyx_media_model::*;
     fn item(server: &ServerId, title: &str) -> MediaItem {
         MediaItem {
             id: ItemId { server: server.clone(), id: "1".into() },

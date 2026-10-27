@@ -20,7 +20,7 @@ pub fn save(root: &Path, key: &str, view: &View) {
     }
     if let Ok(data) = serde_json::to_vec(view)
         && data.len() <= 32 * 1024 * 1024 {
-            let _ = nixe_core::cmd::atomic_write(&path(root, key), data);
+            let _ = nyx_core::cmd::atomic_write(&path(root, key), data);
         }
     prune(root, KEPT);
 }
@@ -45,7 +45,7 @@ fn prune(root: &Path, keep: usize) {
     }
 }
 pub fn root() -> PathBuf {
-    nixe_core::paths::cache_dir().join("views")
+    nyx_core::paths::cache_dir().join("views")
 }
 #[cfg(test)]
 mod tests {

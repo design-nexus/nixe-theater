@@ -1,9 +1,9 @@
 //! Native provider-independent library views built from the shared Media Player cards.
 use crate::{artwork, plex, prefs, servers, widgets, window};
 use gtk::{gio, glib, prelude::*};
-use nixe_media_model::index::edition_key;
-use nixe_media_model::{MediaItem, MediaKind, PlaybackMode, PlaybackRequest, ProviderError, ProviderKind};
-use nixe_ui::media::{self, Artwork, PosterCard};
+use nyx_media_model::index::edition_key;
+use nyx_media_model::{MediaItem, MediaKind, PlaybackMode, PlaybackRequest, ProviderError, ProviderKind};
+use nyx_ui::media::{self, Artwork, PosterCard};
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
@@ -78,7 +78,7 @@ pub(crate) fn poster_card(item: &MediaItem, parent_count: bool) -> (Artwork, Pos
         card.root.set_tooltip_text(Some(&description));
     }
 
-    let (title, subtitle, detail) = nixe_media_model::tv::labels(item);
+    let (title, subtitle, detail) = nyx_media_model::tv::labels(item);
     card.title.set_text(&title);
     card.title.set_tooltip_text(Some(&title));
     card.meta.set_text(&subtitle);
@@ -141,7 +141,7 @@ fn grid(key: &str) -> (gtk::Box, gio::ListStore) {
     stack.set_visible_child_name(if prefs::get().list_views.get(&list_key).copied().unwrap_or(false) { "list" } else { "posters" });
     let bar = widgets::hbox(8);
     bar.set_halign(gtk::Align::End);
-    let toggle = nixe_ui::widgets::icon_button("view-list-symbolic", "Switch poster/list view");
+    let toggle = nyx_ui::widgets::icon_button("view-list-symbolic", "Switch poster/list view");
     let switch_stack = stack.downgrade();
     toggle.connect_clicked(move |_| {
         let Some(switch_stack) = switch_stack.upgrade() else { return };
@@ -191,7 +191,7 @@ pub fn list_card(item: &MediaItem) -> gtk::Box {
     let content = widgets::hbox(12);
     let text = widgets::vbox(5);
     text.set_hexpand(true);
-    let (title, subtitle, episode) = nixe_media_model::tv::labels(item);
+    let (title, subtitle, episode) = nyx_media_model::tv::labels(item);
     let title_label = widgets::label(&title, "card-title");
     title_label.set_max_width_chars(1);
     title_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -302,7 +302,7 @@ pub fn build(stack: &gtk::Stack) {
         let spacer = widgets::hbox(0);
         spacer.set_hexpand(true);
         toolbar.append(&spacer);
-        toolbar.append(&nixe_ui::chrome::status_action("view-refresh-symbolic", "Refresh libraries", servers::refresh));
+        toolbar.append(&nyx_ui::chrome::status_action("view-refresh-symbolic", "Refresh libraries", servers::refresh));
         page.append(&toolbar);
         page.append(&chips);
         let (view, store) = grid(id);
@@ -659,14 +659,14 @@ fn render_home(data: crate::catalog::Home) {
             text.set_hexpand(true);
             line.append(&text);
             if !state.connected && !state.busy {
-                let retry = nixe_ui::widgets::icon_button("view-refresh-symbolic", "Try again");
+                let retry = nyx_ui::widgets::icon_button("view-refresh-symbolic", "Try again");
                 let provider = state.provider;
                 retry.connect_clicked(move |_| match provider {
                     ProviderKind::Plex => plex::refresh(),
                     ProviderKind::Jellyfin => crate::jellyfin::refresh(),
                 });
                 line.append(&retry);
-                let login = nixe_ui::widgets::icon_button("network-server-symbolic", "Sign in again");
+                let login = nyx_ui::widgets::icon_button("network-server-symbolic", "Sign in again");
                 login.connect_clicked(move |_| match provider {
                     ProviderKind::Plex => plex::connect_dialog(),
                     ProviderKind::Jellyfin => crate::jellyfin::connect_dialog(),
@@ -772,10 +772,10 @@ fn hero(item: &MediaItem, actions: bool) -> gtk::Overlay {
 }
 struct HomeRow {
     content: gtk::Box,
-    cards: HashMap<nixe_media_model::ItemId, (MediaItem, String, gtk::Box)>,
+    cards: HashMap<nyx_media_model::ItemId, (MediaItem, String, gtk::Box)>,
 }
 thread_local! { static ROWS: RefCell<HashMap<String, HomeRow>> = RefCell::new(HashMap::new()); }
-fn row(body: &gtk::Box, heading: &str, items: Vec<MediaItem>, descriptions: Option<&[(nixe_media_model::ItemId, String)]>) {
+fn row(body: &gtk::Box, heading: &str, items: Vec<MediaItem>, descriptions: Option<&[(nyx_media_model::ItemId, String)]>) {
     body.set_visible(!items.is_empty());
     ROWS.with(|rows| {
         let mut rows = rows.borrow_mut();
@@ -1008,7 +1008,7 @@ fn detail(mut item: MediaItem, children: Vec<MediaItem>) {
             }
         });
         action_bar.append(&play);
-        let start = nixe_ui::widgets::icon_button("media-skip-backward-symbolic", "Start over");
+        let start = nyx_ui::widgets::icon_button("media-skip-backward-symbolic", "Start over");
         start.set_visible(progress);
         let (i, v, m, c) = (item.clone(), version.clone(), playback.clone(), choices.clone());
         start.connect_clicked(move |_| {
@@ -1036,7 +1036,7 @@ fn detail(mut item: MediaItem, children: Vec<MediaItem>) {
         text.append(&versions);
     }
     if matches!(item.kind, MediaKind::Movie | MediaKind::Episode) {
-        let add = nixe_ui::widgets::icon_button("list-add-symbolic", "Add to a playlist");
+        let add = nyx_ui::widgets::icon_button("list-add-symbolic", "Add to a playlist");
         let selected = item.clone();
         add.connect_clicked(move |_| crate::playlists::add_dialog(selected.clone()));
         action_bar.append(&add);
@@ -1398,7 +1398,7 @@ fn show_item_menu(anchor: &gtk::Widget, x: f64, y: f64, item: MediaItem, show_de
 /// with all its episodes; the server does that).
 fn watched_button(item: &MediaItem) -> gtk::Button {
     let watched = item.watch.watched;
-    let b = nixe_ui::widgets::icon_button(
+    let b = nyx_ui::widgets::icon_button(
         if watched { "edit-undo-symbolic" } else { "object-select-symbolic" },
         if watched { "Mark unwatched" } else { "Mark watched" },
     );
@@ -1419,8 +1419,8 @@ pub fn set_watched(item: &MediaItem, watched: bool) {
     };
     let (id, library) = (item.id.clone(), item.library_id.clone());
     let revision = servers::revision();
-    let state = nixe_media_model::WatchState { position_ms: 0, watched, updated_at: None };
-    nixe_core::cmd::background(
+    let state = nyx_media_model::WatchState { position_ms: 0, watched, updated_at: None };
+    nyx_core::cmd::background(
         move || {
             let mut result = client.apply_watch(&id, &state)?;
             if result.library_id.is_empty() {
@@ -1443,7 +1443,7 @@ pub fn set_watched(item: &MediaItem, watched: bool) {
 }
 
 /// Play `item` with its first playable source, from the start or resuming; false when
-/// none is online. (Nixe Assistant's `theater.play`.)
+/// none is online. (Nyx Assistant's `theater.play`.)
 pub fn play_item(item: &MediaItem, from_start: bool) -> bool {
     if item.kind == MediaKind::Series {
         return crate::control::next_up(item).is_some_and(|episode| play_item(&episode, from_start));
@@ -1509,7 +1509,7 @@ fn start_playback(item: MediaItem, version: String, from_start: bool, choice: &s
     let mode = if choice == "transcode" { PlaybackMode::Transcode } else { PlaybackMode::Direct };
     let auto_transcode = choice == "auto";
     let (c, i, selected) = (client.clone(), item.clone(), version.clone());
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             let resolve = |mode| {
                 c.resolve(PlaybackRequest {
@@ -1568,7 +1568,7 @@ fn show_detail_cached(mut item: MediaItem) {
     CURRENT.with(|c| *c.borrow_mut() = Some(item.clone()));
     let id = item.id.clone();
     let generation = DETAIL_GENERATION.with(|g| g.get());
-    nixe_core::cmd::background(
+    nyx_core::cmd::background(
         move || {
             servers::database()
                 .ok()

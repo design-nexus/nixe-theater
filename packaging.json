@@ -2,7 +2,7 @@
   "application": "theater",
   "directory": "theater",
   "packages": [
-    "nixe-theater"
+    "nyx-theater"
   ],
   "manifest": "Cargo.toml",
   "prepare": [],
@@ -13,9 +13,9 @@
       "test",
       "--locked",
       "-p",
-      "nixe-theater",
+      "nyx-theater",
       "--bin",
-      "nixe-theater"
+      "nyx-theater"
     ]
   ]
 }

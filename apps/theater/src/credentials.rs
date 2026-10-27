@@ -1,6 +1,6 @@
 //! Secret Service storage, following Git's dedicated secret-tool credentials.
-use nixe_media_model::ProviderError;
-use nixe_media_model::Secret;
+use nyx_media_model::ProviderError;
+use nyx_media_model::Secret;
 use std::{
     io::Write,
     process::{Child, Command, Output, Stdio},
@@ -16,7 +16,7 @@ fn tool(verb: &str, provider: &str, address: &str) -> Command {
     if verb == "store" {
         command.arg(format!("--label=Theater {provider} server"));
     }
-    command.args(["application", "nixe-theater", "provider", provider, "server", address]).stderr(Stdio::null());
+    command.args(["application", "nyx-theater", "provider", provider, "server", address]).stderr(Stdio::null());
     command
 }
 fn wait_output(mut child: Child, limit: Duration) -> Result<Output> {

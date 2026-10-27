@@ -1,6 +1,6 @@
 //! Source marks use the same embedded symbolic-icon installation as shared playback.
 pub fn install() {
-    let dir = nixe_core::paths::cache_dir().join("rating-icons");
+    let dir = nyx_core::paths::cache_dir().join("rating-icons");
     for (name, svg) in [
         ("theater-filter-symbolic.svg", include_str!("../data/theater-filter-symbolic.svg")),
         ("theater-imdb-symbolic.svg", include_str!("../data/ratings/imdb-symbolic.svg")),
@@ -13,7 +13,7 @@ pub fn install() {
     ] {
         let file = dir.join(name);
         if std::fs::read_to_string(&file).ok().as_deref() != Some(svg) {
-            let _ = nixe_core::cmd::atomic_write(&file, svg);
+            let _ = nyx_core::cmd::atomic_write(&file, svg);
         }
     }
     if let Some(display) = gtk::gdk::Display::default() {

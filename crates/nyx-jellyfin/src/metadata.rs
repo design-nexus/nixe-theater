@@ -1,4 +1,4 @@
-use nixe_media_model::*;
+use nyx_media_model::*;
 use serde_json::Value;
 fn text(v: &Value) -> Option<String> {
     v.as_str().filter(|s| !s.is_empty()).map(str::to_owned)

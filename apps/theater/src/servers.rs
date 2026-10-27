@@ -1,11 +1,11 @@
 //! Shared provider routing; source identity prevents cross-server credential use.
 use crate::{jellyfin, plex, prefs};
-use nixe_media_model::*;
+use nyx_media_model::*;
 use std::collections::HashMap;
 #[derive(Clone)]
 pub enum Client {
-    Plex(nixe_plex::Client),
-    Jellyfin(nixe_jellyfin::Client),
+    Plex(nyx_plex::Client),
+    Jellyfin(nyx_jellyfin::Client),
 }
 impl Client {
     pub fn playlists(&self, cursor: Option<&str>) -> Result<Page<MediaPlaylist>, ProviderError> {

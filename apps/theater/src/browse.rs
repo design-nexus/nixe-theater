@@ -1,5 +1,5 @@
 //! Typed library queries shared by the native panel, saved views and worker index.
-use nixe_media_model::*;
+use nyx_media_model::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -350,7 +350,7 @@ mod tests {
 mod regression {
     use super::*;
     fn movie() -> MediaItem {
-        nixe_plex::parse_item(&serde_json::json!({"type":"movie","ratingKey":"1","title":"Film","year":2020,"Genre":[{"tag":"Drama"}],"Media":[
+        nyx_plex::parse_item(&serde_json::json!({"type":"movie","ratingKey":"1","title":"Film","year":2020,"Genre":[{"tag":"Drama"}],"Media":[
             {"id":"one","height":2160,"Part":[{"key":"/library/parts/1/file","Stream":[{"streamType":1,"colorTrc":"bt709"},{"streamType":2,"languageCode":"eng"}]}]},
             {"id":"two","height":1080,"Part":[{"key":"/library/parts/2/file","Stream":[{"streamType":1,"colorTrc":"smpte2084"},{"streamType":2,"languageCode":"fra"}]}]}
         ]}),&ServerId{provider:ProviderKind::Plex,id:"fixture".into()},"1").unwrap()
@@ -404,7 +404,7 @@ mod episode_count_tests {
     #[test]
     fn updates_show_and_season_counts_with_source_scoped_episodes() {
         let server = ServerId { provider: ProviderKind::Plex, id: "fixture".into() };
-        let mut show = nixe_plex::parse_item(
+        let mut show = nyx_plex::parse_item(
             &serde_json::json!({"type":"show","ratingKey":"1","title":"Show","leafCount":2,"viewedLeafCount":0}),
             &server,
             "1",
@@ -448,7 +448,7 @@ mod tv_rating_sort_tests {
             if let Some(score) = score {
                 v["Rating"] = serde_json::json!([{"image":"imdb://image.rating","value":score}]);
             }
-            nixe_plex::parse_item(&v, &server, "1").unwrap()
+            nyx_plex::parse_item(&v, &server, "1").unwrap()
         };
         let mut shows = vec![make("1", "A", Some(7.2)), make("2", "Z", Some(9.1)), make("3", "Missing", None)];
         let mut state = State { sort: "imdb".into(), descending: true, ..Default::default() };

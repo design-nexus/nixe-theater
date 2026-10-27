@@ -7,7 +7,7 @@
 
 use crate::{playback::Playback, widgets, window};
 use gtk::{glib, prelude::*};
-use nixe_playback::controls::{choice, fill_menu};
+use nyx_playback::controls::{choice, fill_menu};
 use std::{
     cell::{Cell, RefCell},
     process::Command,
@@ -36,7 +36,7 @@ pub fn interval_label(minutes: u32) -> String {
 }
 
 pub fn remaining_text(secs: u64) -> String {
-    nixe_playback::controls::time(secs as f64)
+    nyx_playback::controls::time(secs as f64)
 }
 
 pub fn selected_minutes() -> u32 {

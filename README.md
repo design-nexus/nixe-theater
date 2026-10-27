@@ -6,11 +6,11 @@ play them, and pick up where you left off.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/design-nexus/nixe-theater/main/install.sh | bash -s -- theater
+curl -fsSL https://raw.githubusercontent.com/design-nexus/nyx-theater/main/install.sh | bash -s -- theater
 ```
 
 This installs mpv, FFmpeg and libsecret if they're missing, builds with Cargo, and installs
-`nixe-theater` to `~/.local/bin` with a launcher entry. To remove it, run the same line with
+`nyx-theater` to `~/.local/bin` with a launcher entry. To remove it, run the same line with
 `uninstall.sh` in place of `install.sh`.
 
 ## Connecting
@@ -70,7 +70,7 @@ other for the titles you choose.
 ## Usage
 
 ```
-nixe-theater [--section home|discover|movies|tv|collections|playlists|settings] [--toggle] [FILE|URI]
+nyx-theater [--section home|discover|movies|tv|collections|playlists|settings] [--toggle] [FILE|URI]
 ```
 
 | Key | Action |
@@ -89,15 +89,15 @@ nixe-theater [--section home|discover|movies|tv|collections|playlists|settings] 
 | F1 | Keyboard shortcuts |
 | Ctrl+Q | Close |
 
-Nixe Assistant works Theater over the session bus: `theater.search`,
+Nyx Assistant works Theater over the session bus: `theater.search`,
 `theater.continue_watching`, `theater.now_playing`, `theater.play`, `theater.control` and
 `theater.mark_watched`.
 
 ## Files
 
-- Settings: `~/.config/nixe-theater/settings.toml`
-- Playlists, personal ratings and saved views: `~/.local/share/nixe-theater/`
-- Library, metadata and artwork caches (artwork up to 512 MiB): `~/.cache/nixe-theater/`
+- Settings: `~/.config/nyx-theater/settings.toml`
+- Playlists, personal ratings and saved views: `~/.local/share/nyx-theater/`
+- Library, metadata and artwork caches (artwork up to 512 MiB): `~/.cache/nyx-theater/`
 
 API references: [Plex](https://developer.plex.tv/pms/), [Jellyfin](https://api.jellyfin.org/),
 [libmpv](https://mpv.io/manual/stable/).

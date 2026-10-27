@@ -1,7 +1,7 @@
 //! Live poster sizing retains existing models, widgets and scroll containers.
 use crate::prefs;
 use gtk::prelude::*;
-use nixe_ui::media::{Artwork, PosterCard};
+use nyx_ui::media::{Artwork, PosterCard};
 use std::cell::RefCell;
 thread_local! { static CARDS: RefCell<Vec<Box<dyn Fn() -> bool>>> = RefCell::new(Vec::new()); }
 pub fn width() -> i32 {

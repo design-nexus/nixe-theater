@@ -1,6 +1,6 @@
-//! Nixe-style building blocks: pages, groups and option rows.
+//! Nyx-style building blocks: pages, groups and option rows.
 
-pub use nixe_ui::widgets::*;
+pub use nyx_ui::widgets::*;
 
 use gtk::prelude::*;
 

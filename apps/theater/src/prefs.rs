@@ -1,4 +1,4 @@
-pub use nixe_theme::ThemeMode;
+pub use nyx_theme::ThemeMode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -28,7 +28,7 @@ pub struct Prefs {
     pub mdblist_enabled: bool,
     pub metadata_language: String,
     pub metadata_region: String,
-    pub reconciliation: nixe_media_model::Reconciliation,
+    pub reconciliation: nyx_media_model::Reconciliation,
     /// Play the next episode after a countdown when one ends.
     pub autoplay_next: bool,
 }
@@ -64,22 +64,22 @@ impl Default for Prefs {
         }
     }
 }
-nixe_core::prefs_store!(Prefs);
+nyx_core::prefs_store!(Prefs);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlexSettings {
     pub address: String,
     pub name: String,
-    pub server: nixe_media_model::ServerId,
-    pub libraries: Vec<nixe_media_model::Library>,
+    pub server: nyx_media_model::ServerId,
+    pub libraries: Vec<nyx_media_model::Library>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JellyfinSettings {
     pub address: String,
     pub name: String,
-    pub server: nixe_media_model::ServerId,
-    pub libraries: Vec<nixe_media_model::Library>,
+    pub server: nyx_media_model::ServerId,
+    pub libraries: Vec<nyx_media_model::Library>,
     pub user_id: String,
 }
 

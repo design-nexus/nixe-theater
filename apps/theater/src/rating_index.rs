@@ -1,5 +1,5 @@
 //! Populate omitted Plex rating fields only when a sourced-rating sort needs them.
-use nixe_media_model::*;
+use nyx_media_model::*;
 use std::{
     cell::RefCell,
     sync::{

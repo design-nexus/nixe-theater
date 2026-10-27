@@ -1,5 +1,5 @@
 //! Worker-owned view index. GTK submits only the newest request and renders one page.
-use nixe_media_model::{
+use nyx_media_model::{
     index::{UnifiedItem, unify},
     *,
 };
@@ -281,7 +281,7 @@ impl Index {
                 crate::metadata::apply(item);
             }
             crate::browse::aggregate_tv(&mut items);
-            nixe_media_model::tv::enrich(&mut items);
+            nyx_media_model::tv::enrich(&mut items);
             self.series =
                 items.iter().filter(|i| i.kind == MediaKind::Series).map(|i| (i.id.clone(), i.title.to_lowercase())).collect();
             self.groups = Arc::new(Snapshot::new(unify(items)));
@@ -324,7 +324,7 @@ impl Index {
             let selected: Vec<_> = self.groups.iter().filter_map(|group| select(group, None, false)).collect();
             let episodes: Vec<_> = selected.iter().filter(|i| i.kind == MediaKind::Episode).cloned().collect();
             if !episodes.is_empty() {
-                let recent = nixe_media_model::tv::recently_added_shows(&episodes, &selected);
+                let recent = nyx_media_model::tv::recently_added_shows(&episodes, &selected);
                 home.tv_new = recent.iter().map(|(show, text)| (show.id.clone(), text.clone())).collect();
                 home.tv = recent.into_iter().map(|(show, _)| show).collect();
             }
@@ -546,7 +546,7 @@ mod detail_index_tests {
     fn detail_lookup_keeps_full_selected_version_and_avoids_catalog_rebuilds() {
         let server = ServerId { provider: ProviderKind::Plex, id: "fixture".into() };
         let base =
-            nixe_plex::parse_item(&serde_json::json!({"type":"movie","ratingKey":"1","title":"Title"}), &server, "1").unwrap();
+            nyx_plex::parse_item(&serde_json::json!({"type":"movie","ratingKey":"1","title":"Title"}), &server, "1").unwrap();
         let items = (0..20000)
             .map(|n| {
                 let mut i = base.clone();
@@ -573,7 +573,7 @@ mod discovery_tests {
     #[test]
     fn discovery_uses_root_titles_and_honors_watch_quality_and_genres() {
         let server = ServerId { provider: ProviderKind::Plex, id: "test".into() };
-        let mut movie=nixe_plex::parse_item(&serde_json::json!({"type":"movie","ratingKey":"1","title":"Short comedy","duration":80*60000,"Genre":[{"tag":"Comedy"}],"Media":[{"height":2160,"Part":[]}]}),&server,"1").unwrap();
+        let mut movie=nyx_plex::parse_item(&serde_json::json!({"type":"movie","ratingKey":"1","title":"Short comedy","duration":80*60000,"Genre":[{"tag":"Comedy"}],"Media":[{"height":2160,"Part":[]}]}),&server,"1").unwrap();
         let mut episode = movie.clone();
         episode.kind = MediaKind::Episode;
         episode.id.id = "2".into();

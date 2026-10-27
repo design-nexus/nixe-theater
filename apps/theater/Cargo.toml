@@ -1,25 +1,25 @@
 [package]
-name = "nixe-theater"
+name = "nyx-theater"
 version = "0.1.0"
-description = "A unified Plex and Jellyfin theater for Nixe"
+description = "A unified Plex and Jellyfin theater for Nyx"
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-nixe-core = { git = "https://github.com/design-nexus/nixe-core.git", rev = "87682e6c936b6a4f006639b1a1c099e96346c07c" }
-nixe-theme = { git = "https://github.com/design-nexus/nixe-design.git", rev = "64786dc295708951013c126351f1830664a7d15d" }
-nixe-ui = { git = "https://github.com/design-nexus/nixe-design.git", rev = "64786dc295708951013c126351f1830664a7d15d" }
-nixe-playback = { git = "https://github.com/design-nexus/nixe-design.git", rev = "64786dc295708951013c126351f1830664a7d15d" }
-nixe-media-model = { path = "../../crates/nixe-media-model" }
-nixe-media-cache = { path = "../../crates/nixe-media-cache" }
+nyx-core = { git = "https://github.com/design-nexus/nyx-core.git", rev = "52cba5e27a3dd5f00c780f53e423302b4b5f9c9c" }
+nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "938c638951a53f5874a8276d07ac9dcd68b191ad" }
+nyx-ui = { git = "https://github.com/design-nexus/nyx-design.git", rev = "938c638951a53f5874a8276d07ac9dcd68b191ad" }
+nyx-playback = { git = "https://github.com/design-nexus/nyx-design.git", rev = "938c638951a53f5874a8276d07ac9dcd68b191ad" }
+nyx-media-model = { path = "../../crates/nyx-media-model" }
+nyx-media-cache = { path = "../../crates/nyx-media-cache" }
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-nixe-plex = { path = "../../crates/nixe-plex" }
+nyx-plex = { path = "../../crates/nyx-plex" }
 sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
 async-channel = "2"
-nixe-jellyfin = { path = "../../crates/nixe-jellyfin" }
+nyx-jellyfin = { path = "../../crates/nyx-jellyfin" }
 
 rusqlite = { version = "0.40", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
