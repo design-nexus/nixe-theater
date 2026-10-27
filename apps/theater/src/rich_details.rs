@@ -241,6 +241,13 @@ pub fn people(body: &gtk::Box, i: &MediaItem) {
             photo(&art, path, Some(i));
         }
         let card = nyx_ui::media::PosterCard::new(&art.root, 112);
+        let mut child = art.root.first_child();
+        while let Some(widget) = child {
+            child = widget.next_sibling();
+            if widget.has_css_class("hover-play") {
+                art.root.remove_overlay(&widget);
+            }
+        }
         card.title.set_text(&credit.name);
         card.meta.set_text(&credit.role);
         card.title.set_tooltip_text(Some(&credit.name));
