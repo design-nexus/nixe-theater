@@ -17,7 +17,7 @@ pub fn open() {
             groups: &[
                 ("Servers", "network-server-symbolic", "Connections and watch state"),
                 ("Metadata", "dialog-information-symbolic", "Ratings, credits and recommendations"),
-                ("Theater window", "applications-graphics-symbolic", "Theme, glow, motion"),
+                ("Theater window", "applications-graphics-symbolic", "Theme, accent, motion"),
                 ("Keyboard", "input-keyboard-symbolic", "Shortcuts"),
             ],
             search_text: None,
@@ -262,11 +262,7 @@ fn build(page: &Page) {
         glib::ControlFlow::Continue
     });
     g.add(&widgets::row("Current colors", "", Some(swatches.upcast_ref())));
-    let (r, _) = widgets::switch_row("Glow", "Soft accent glow around focused and selected elements.", p.glow, |on| {
-        prefs::update(|p| p.glow = on);
-        theme::apply();
-    });
-    g.add(&r);
+    g.add(&nyx_ui::widgets::accent_row("theater"));
     let (r, _) =
         widgets::switch_row("Reduce motion", "Turn off transitions and animations in this window.", p.reduce_motion, |on| {
             prefs::update(|p| p.reduce_motion = on);

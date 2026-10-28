@@ -7,12 +7,14 @@ struct Ui {
     window: gtk::ApplicationWindow,
     overlay: gtk::Overlay,
     nav: gtk::Box,
-    head: gtk::Box,
     stack: gtk::Stack,
     search: gtk::SearchEntry,
+    /// The sidebar's foot: what the servers and the app are doing.
     status: gtk::Label,
     player: Rc<RefCell<Playback>>,
-    status_bar: gtk::Box,
+    /// The header (hidden in full screen) and its subtitle, the page you're on.
+    header: gtk::WindowHandle,
+    subtitle: gtk::Label,
     buttons: Vec<(&'static str, &'static str, gtk::Button)>,
 }
 thread_local! {
@@ -125,12 +127,6 @@ pub fn build(app: &gtk::Application) {
     let nav = widgets::vbox(0);
     nav.add_css_class("settings-navigation");
     nav.set_hexpand(false);
-    let head = chrome::sidebar_head("Theater", Some("Search library (Ctrl+F)"));
-    head.toggle.connect_clicked(|_| toggle_sidebar());
-    if let Some(search) = &head.search {
-        search.connect_clicked(|_| show_search());
-    }
-    nav.append(&head.root);
     let list = widgets::vbox(0);
     list.set_hexpand(false);
     let mut buttons = Vec::new();
@@ -176,8 +172,14 @@ pub fn build(app: &gtk::Application) {
     let playing = crate::now_playing::build(&player);
     stack.add_named(&playing, Some("playing"));
     let search = gtk::SearchEntry::new();
-    search.set_placeholder_text(Some("Search library"));
-    search.set_visible(false);
+    search.set_placeholder_text(Some("Search movies and TV shows  (Ctrl+F)"));
+    search.update_property(&[gtk::accessible::Property::Label("Search the library")]);
+    search.add_css_class("bar-search");
+    search.set_width_chars(40);
+    // Typing starts from the page you were on, so its search (movies, playlists…) applies.
+    let focus = gtk::EventControllerFocus::new();
+    focus.connect_enter(|_| set_search_origin());
+    search.add_controller(focus);
     search.connect_search_changed(|entry| {
         if SEARCH_CLEARING.with(|clearing| clearing.get()) { return; }
         let origin = SEARCH_ORIGIN.with(|origin| origin.borrow().clone());
@@ -193,22 +195,28 @@ pub fn build(app: &gtk::Application) {
     let content = widgets::vbox(0);
     content.add_css_class("settings-content");
     content.set_hexpand(true);
-    content.append(&chrome::search_strip(&search));
     content.append(&stack);
     let body = widgets::hbox(0);
     body.set_vexpand(true);
     body.append(&nav);
     body.append(&content);
-    let bar = widgets::hbox(16);
-    bar.add_css_class("status-bar");
-    let help = chrome::shortcuts_button(show_shortcuts);
-    bar.append(&help);
     let readout = widgets::label("No servers connected", "status-readout");
-    readout.set_hexpand(true);
-    readout.set_xalign(1.0);
+    readout.add_css_class("nav-foot");
+    readout.add_css_class("compact-hide");
+    readout.set_xalign(0.0);
     readout.set_ellipsize(gtk::pango::EllipsizeMode::End);
-    bar.append(&readout);
-    let return_video = chrome::status_action("media-playback-start-symbolic", "Return to playback", || navigate("playing"));
+    nav.append(&readout);
+    // The header: the app and the page, search, and while a video plays in the
+    // background its controls, then opening a file, refreshing and Settings.
+    let header = chrome::app_header(&window, "theater-film-symbolic", "Theater");
+    // The sidebar's toggle sits in the header, after the app and the page.
+    let collapse = nyx_ui::widgets::bar_button("sidebar-show-symbolic", "Collapse the sidebar (Ctrl+B)");
+    collapse.connect_clicked(|_| toggle_sidebar());
+    header.start.append(&collapse);
+    header.center.append(&search);
+    let bar = header.end.clone();
+    let return_video = nyx_ui::widgets::bar_button("media-playback-start-symbolic", "Return to playback");
+    return_video.connect_clicked(|_| navigate("playing"));
     return_video.set_visible(false);
     bar.append(&return_video);
     let mini = widgets::hbox(6);
@@ -234,6 +242,13 @@ pub fn build(app: &gtk::Application) {
     mini.append(&mini_fwd);
     mini.set_visible(false);
     bar.append(&mini);
+    let open = nyx_ui::widgets::bar_button("document-open-symbolic", "Open a video file (Ctrl+O)");
+    open.connect_clicked(|_| open_file());
+    bar.append(&open);
+    let refresh = nyx_ui::widgets::bar_button("view-refresh-symbolic", "Refresh libraries");
+    refresh.connect_clicked(|_| crate::servers::refresh());
+    bar.append(&refresh);
+    bar.append(&chrome::settings_button(settings::open));
     let weak = return_video.downgrade();
     let weak_mini = mini.downgrade();
     let weak_player = Rc::downgrade(&player);
@@ -255,11 +270,10 @@ pub fn build(app: &gtk::Application) {
         }
         glib::ControlFlow::Continue
     });
-    bar.append(&chrome::gear(settings::open));
     let frame = widgets::vbox(0);
     frame.add_css_class("window-frame");
+    frame.append(&header.root);
     frame.append(&body);
-    frame.append(&bar);
     let overlay = gtk::Overlay::new();
     overlay.set_child(Some(&frame));
     window.set_child(Some(&overlay));
@@ -284,10 +298,10 @@ pub fn build(app: &gtk::Application) {
                 return glib::Propagation::Proceed;
             }
             UI.with(|u| {
-                if let Some(u) = u.borrow().as_ref() {
-                    if u.player.borrow().has_video() {
-                        u.player.borrow().toggle();
-                    }
+                if let Some(u) = u.borrow().as_ref()
+                    && u.player.borrow().has_video()
+                {
+                    u.player.borrow().toggle();
                 }
             });
             return glib::Propagation::Stop;
@@ -308,13 +322,9 @@ pub fn build(app: &gtk::Application) {
                 }
             }),
             gdk::Key::Escape if settings_card::is_open() => settings_card::escape(),
-            gdk::Key::Escape => UI.with(|u| {
-                let s = u.borrow().as_ref().map(|u| u.search.clone());
-                if let Some(s) = s {
-                    s.set_text("");
-                    s.set_visible(false);
-                }
-            }),
+            gdk::Key::Escape if UI.with(|u| u.borrow().as_ref().is_some_and(|u| !u.search.text().is_empty())) => {
+                hide_search()
+            }
             gdk::Key::Left | gdk::Key::Right if !ctrl => {
                 let handled = UI.with(|u| {
                     if let Some(u) = u.borrow().as_ref() {
@@ -356,10 +366,7 @@ pub fn build(app: &gtk::Application) {
                     w.remove_css_class("fullscreen");
                 }
                 u.nav.set_visible(!full);
-                u.status_bar.set_visible(!full);
-                if full {
-                    u.search.set_visible(false);
-                }
+                u.header.set_visible(!full);
             }
         });
     });
@@ -382,12 +389,12 @@ pub fn build(app: &gtk::Application) {
             window: window.clone(),
             overlay,
             nav,
-            head: head.root,
             stack,
             search,
             status: readout,
             player,
-            status_bar: bar,
+            header: header.root.clone(),
+            subtitle: header.subtitle.clone(),
             buttons,
         })
     });
@@ -414,8 +421,19 @@ pub fn build(app: &gtk::Application) {
     );
 }
 
+/// Ctrl+F: into the search field.
 fn show_search() {
-    if UI.with(|u| u.borrow().as_ref().is_some_and(|u| u.search.is_visible())) { hide_search(); return; }
+    UI.with(|u| {
+        if let Some(u) = u.borrow().as_ref() {
+            u.search.grab_focus();
+        }
+    });
+}
+/// Search what the page you're on holds (movies, TV shows, playlists…), or everything.
+fn set_search_origin() {
+    if page() == "search" {
+        return;
+    }
     UI.with(|u| {
         if let Some(u) = u.borrow().as_ref() {
             let current = page();
@@ -429,15 +447,13 @@ fn show_search() {
                 _ => "Search movies and TV shows",
             }));
             SEARCH_ORIGIN.with(|stored| *stored.borrow_mut() = origin);
-            u.search.set_visible(true);
-            u.search.grab_focus();
         }
     });
 }
 fn hide_search() {
     SEARCH_CLEARING.with(|clearing| clearing.set(true));
     let origin = SEARCH_ORIGIN.with(|origin| origin.borrow().clone());
-    UI.with(|u| if let Some(u) = u.borrow().as_ref() { u.search.set_text(""); u.search.set_visible(false); });
+    UI.with(|u| if let Some(u) = u.borrow().as_ref() { u.search.set_text(""); });
     if origin == "playlists" { crate::playlists::search(""); }
     else { crate::library::search("", &origin); }
     SEARCH_CLEARING.with(|clearing| clearing.set(false));
@@ -462,6 +478,8 @@ fn show_page(id: &str) {
                 }
             }
             chrome::set_title(&u.window, "Theater", title);
+            u.subtitle.set_text(title);
+            u.subtitle.set_visible(true);
         }
     });
     crate::library::show(id);
@@ -472,7 +490,7 @@ pub fn page() -> String {
     })
 }
 pub fn navigate(id: &str) {
-    if id != "search" && (page() == "search" || UI.with(|u| u.borrow().as_ref().is_some_and(|u| u.search.is_visible()))) { hide_search(); }
+    if id != "search" && (page() == "search" || UI.with(|u| u.borrow().as_ref().is_some_and(|u| !u.search.text().is_empty()))) { hide_search(); }
     NAV_FORWARD.with(|h| h.borrow_mut().clear());
     let previous = page();
     if previous != id {
@@ -534,11 +552,6 @@ pub fn back_from_details() {
         })
         .unwrap_or_else(|| "home".into());
     if current != "details" { NAV_FORWARD.with(|h| h.borrow_mut().push((current, None))); }
-    UI.with(|u| {
-        if let Some(u) = u.borrow().as_ref() {
-            u.search.set_visible(false);
-        }
-    });
     navigate_inner(&previous);
 }
 pub fn forward() {
@@ -579,7 +592,6 @@ fn apply_width() {
                 u.nav.remove_css_class("compact");
             }
             compact_children(u.nav.upcast_ref(), compact);
-            chrome::set_head_compact(&u.head, compact);
             settings_card::fit(&u.window);
             // Existing page padding narrows with the allocated window size too.
             for page in u.stack.pages().iter::<gtk::StackPage>().flatten() {

@@ -1,8 +1,10 @@
-//! Source marks use the same embedded symbolic-icon installation as shared playback.
+//! Source marks and the app's own glyphs (the film strip in the header) use the same
+//! embedded symbolic-icon installation as shared playback.
 pub fn install() {
     let dir = nyx_core::paths::cache_dir().join("rating-icons");
     for (name, svg) in [
         ("theater-filter-symbolic.svg", include_str!("../data/theater-filter-symbolic.svg")),
+        ("theater-film-symbolic.svg", include_str!("../data/theater-film-symbolic.svg")),
         ("theater-imdb-symbolic.svg", include_str!("../data/ratings/imdb-symbolic.svg")),
         ("theater-tmdb-symbolic.svg", include_str!("../data/ratings/themoviedatabase-symbolic.svg")),
         ("theater-tomato-symbolic.svg", include_str!("../data/ratings/rottentomatoes-symbolic.svg")),

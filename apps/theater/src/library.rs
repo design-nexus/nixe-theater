@@ -652,13 +652,15 @@ fn render_home(data: crate::catalog::Home) {
         connect.connect_clicked(|_| crate::jellyfin::connect_dialog());
         parts[0].append(&connect);
     } else {
-        for state in servers::connection_states() {
+        // Only a server that needs you (offline, signed out) gets a line here; what's
+        // connecting or loading shows at the sidebar's foot.
+        for state in servers::connection_states().into_iter().filter(|s| !s.connected && !s.busy) {
             let line = widgets::hbox(8);
             let text = widgets::label(&state.message, "dim");
             text.set_wrap(true);
             text.set_hexpand(true);
             line.append(&text);
-            if !state.connected && !state.busy {
+            {
                 let retry = nyx_ui::widgets::icon_button("view-refresh-symbolic", "Try again");
                 let provider = state.provider;
                 retry.connect_clicked(move |_| match provider {
@@ -676,6 +678,8 @@ fn render_home(data: crate::catalog::Home) {
             parts[0].append(&line);
         }
     }
+    // Empty, it takes no room (the page's spacing would push the hero down).
+    parts[0].set_visible(parts[0].first_child().is_some());
     if data.featured != old.featured || parts[1].first_child().is_none() {
         clear(&parts[1]);
         if let Some(item) = &data.featured {
@@ -743,8 +747,8 @@ fn hero(item: &MediaItem, actions: bool) -> gtk::Overlay {
     content.append(&metadata);
     let summary = widgets::label(&item.summary, "theater-hero-summary");
     summary.set_wrap(true);
-    summary.set_lines(2);
     summary.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    summary.set_lines(if actions { 3 } else { 2 });
     summary.set_max_width_chars(1);
     content.append(&summary);
     if actions {
@@ -761,13 +765,23 @@ fn hero(item: &MediaItem, actions: bool) -> gtk::Overlay {
             }
         });
         buttons.append(&play);
-        let details = gtk::Button::with_label("Details");
+        let details = nyx_ui::widgets::bar_button("help-about-symbolic", "Details");
+        details.add_css_class("hero-icon");
         let current = item.clone();
         details.connect_clicked(move |_| show_detail(current.clone()));
         buttons.append(&details);
         content.append(&buttons);
     }
-    art.root.add_overlay(&content);
+    if actions {
+        // On Home the text keeps to the shaded left half; the right half is picture.
+        let halves = widgets::hbox(0);
+        halves.set_homogeneous(true);
+        halves.append(&content);
+        halves.append(&widgets::hbox(0));
+        art.root.add_overlay(&halves);
+    } else {
+        art.root.add_overlay(&content);
+    }
     art.root
 }
 struct HomeRow {
@@ -780,7 +794,9 @@ fn row(body: &gtk::Box, heading: &str, items: Vec<MediaItem>, descriptions: Opti
     ROWS.with(|rows| {
         let mut rows = rows.borrow_mut();
         let row = rows.entry(heading.into()).or_insert_with(|| {
-            body.append(&widgets::label(&heading.to_uppercase(), "group-title"));
+            let title = widgets::label(heading, "shelf-title");
+            title.set_xalign(0.0);
+            body.append(&title);
             let content = widgets::hbox(12);
             let scroll = gtk::ScrolledWindow::builder()
                 .hscrollbar_policy(gtk::PolicyType::External)
@@ -1044,12 +1060,12 @@ fn detail(mut item: MediaItem, children: Vec<MediaItem>) {
     if matches!(item.kind, MediaKind::Movie | MediaKind::Episode | MediaKind::Season | MediaKind::Series) {
         action_bar.append(&watched_button(&item));
     }
-    if item.kind == MediaKind::Episode {
-        if let Some(show) = episode_show(&item) {
-            let button = widgets::labeled_button("go-up-symbolic", "Go to show");
-            button.connect_clicked(move |_| show_detail(show.clone()));
-            action_bar.append(&button);
-        }
+    if item.kind == MediaKind::Episode
+        && let Some(show) = episode_show(&item)
+    {
+        let button = widgets::labeled_button("go-up-symbolic", "Go to show");
+        button.connect_clicked(move |_| show_detail(show.clone()));
+        action_bar.append(&button);
     }
     if item.kind == MediaKind::Series {
         let sources = logical_sources(&item);
@@ -1381,10 +1397,10 @@ fn show_item_menu(anchor: &gtk::Widget, x: f64, y: f64, item: MediaItem, show_de
             show_detail(selected.clone());
         });
     }
-    if item.kind == MediaKind::Episode {
-        if let Some(show) = episode_show(&item) {
-            menu_action(&popover, &menu, "Go to show", move || show_detail(show.clone()));
-        }
+    if item.kind == MediaKind::Episode
+        && let Some(show) = episode_show(&item)
+    {
+        menu_action(&popover, &menu, "Go to show", move || show_detail(show.clone()));
     }
     let display = anchor.display();
     menu_action(&popover, &menu, "Copy title", move || {
