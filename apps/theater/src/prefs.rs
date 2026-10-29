@@ -31,6 +31,7 @@ pub struct Prefs {
     pub reconciliation: nyx_media_model::Reconciliation,
     /// Play the next episode after a countdown when one ends.
     pub autoplay_next: bool,
+    pub up_next_seconds: u32,
 }
 impl Default for Prefs {
     fn default() -> Self {
@@ -61,6 +62,7 @@ impl Default for Prefs {
             metadata_region: "US".into(),
             reconciliation: Default::default(),
             autoplay_next: true,
+            up_next_seconds: 10,
         }
     }
 }

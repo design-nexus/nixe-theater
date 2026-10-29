@@ -34,6 +34,7 @@ pub struct Playback {
     pub position: f64,
     pub title: String,
     pub loaded: bool,
+    up_next_offered: bool,
     pub paused: bool,
     pub tracks: serde_json::Value,
     pub chapters: serde_json::Value,
@@ -244,8 +245,22 @@ impl Playback {
                 if p.loaded {
                     p.report(false);
                 }
+                let prefs = crate::prefs::get();
+                if p.duration - p.position > prefs.up_next_seconds.min(30) as f64 {
+                    p.up_next_offered = false;
+                }
+                let preview = if p.loaded && !p.paused && !p.up_next_offered && prefs.autoplay_next
+                    && prefs.up_next_seconds > 0 && p.duration > 60.0
+                    && p.duration - p.position <= prefs.up_next_seconds.min(30) as f64
+                    && !crate::playlists::has_queue() {
+                    p.up_next_offered = true;
+                    p.remote.as_ref().map(|r| r.media.clone())
+                } else { None };
                 let failed_position = (p.position.max(0.0) * 1000.0) as u64;
                 drop(p);
+                if let Some(item) = preview && let Some(next) = crate::library::next_episode(&item) {
+                    crate::window::preview_up_next(next);
+                }
                 if completed {
                     if crate::playlists::has_queue() {
                         crate::playlists::advance(1);
@@ -275,7 +290,8 @@ impl Playback {
     pub fn open(&mut self, uri: &str) -> Result<(), String> {
         self.initialize()?;
         self.finish_remote();
-        crate::window::cancel_up_next();
+        crate::window::reset_up_next();
+        self.up_next_offered = false;
         self.generation = self.generation.wrapping_add(1);
         self.pending = None;
         self.resume_at = None;

@@ -19,6 +19,7 @@ struct Ui {
 }
 thread_local! {
     /// The "Up next" card while it's counting down, and its timer.
+    static UP_NEXT_DISMISSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static UP_NEXT: RefCell<Option<(gtk::Box, glib::SourceId)>> = const { RefCell::new(None) };
     static UI: RefCell<Option<Ui>> = const { RefCell::new(None) };
     static NAV_HISTORY: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
@@ -49,6 +50,22 @@ const UP_NEXT_SECS: u32 = 10;
 
 /// Offer `next` over the player: it plays when the countdown ends, or now, or not at all.
 pub fn show_up_next(next: nyx_media_model::MediaItem) {
+    show_up_next_card(next, false);
+}
+
+pub fn preview_up_next(next: nyx_media_model::MediaItem) {
+    show_up_next_card(next, true);
+}
+
+pub fn up_next_dismissed() -> bool { UP_NEXT_DISMISSED.with(|v| v.get()) }
+
+pub fn reset_up_next() {
+    cancel_up_next();
+    UP_NEXT_DISMISSED.with(|v| v.set(false));
+}
+
+fn show_up_next_card(next: nyx_media_model::MediaItem, preview: bool) {
+    if up_next_dismissed() { return; }
     cancel_up_next();
     let Some(overlay) = overlay() else { return };
     let card = widgets::hbox(10);
@@ -64,7 +81,7 @@ pub fn show_up_next(next: nyx_media_model::MediaItem) {
         _ => next.title.clone(),
     };
     text.append(&widgets::label(&format!("Up next: {name}"), ""));
-    let count = widgets::label(&format!("Plays in {UP_NEXT_SECS} s"), "dim");
+    let count = widgets::label(if preview { "After this episode" } else { "Plays in 10 s" }, "dim");
     text.append(&count);
     card.append(&text);
     let play = nyx_ui::widgets::icon_button("media-skip-forward-symbolic", "Play it now");
@@ -75,6 +92,19 @@ pub fn show_up_next(next: nyx_media_model::MediaItem) {
     let left = std::cell::Cell::new(UP_NEXT_SECS);
     let item = next.clone();
     let timer = glib::timeout_add_seconds_local(1, move || {
+        if preview {
+            let remaining = UI.with(|u| u.borrow().as_ref().map(|u| {
+                let p = u.player.borrow();
+                (p.duration() - p.position).max(0.0).ceil() as u32
+            })).unwrap_or(0);
+            let lead = prefs::get().up_next_seconds.min(30);
+            if lead == 0 || remaining > lead {
+                if let Some((card, _)) = UP_NEXT.with(|v| v.borrow_mut().take()) { remove_card(&card); }
+                return glib::ControlFlow::Break;
+            }
+            count.set_text(&format!("Episode ends in {remaining} s"));
+            return glib::ControlFlow::Continue;
+        }
         let n = left.get().saturating_sub(1);
         left.set(n);
         if n == 0 {
@@ -90,7 +120,10 @@ pub fn show_up_next(next: nyx_media_model::MediaItem) {
         cancel_up_next();
         crate::library::play_queued(&item);
     });
-    stop.connect_clicked(|_| cancel_up_next());
+    stop.connect_clicked(|_| {
+        UP_NEXT_DISMISSED.with(|v| v.set(true));
+        cancel_up_next();
+    });
     UP_NEXT.with(|u| *u.borrow_mut() = Some((card, timer)));
 }
 

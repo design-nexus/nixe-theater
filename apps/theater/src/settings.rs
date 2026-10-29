@@ -203,6 +203,10 @@ fn build(page: &Page) {
         |on| prefs::update(|p| p.autoplay_next = on),
     );
     g.add(&row);
+    let (row, _) = widgets::choice_row("Show Up next", "Preview before the end. Autoplay still waits for this episode to finish; Off hides the card.",
+        widgets::opts(&[("0", "Off"), ("10", "10 seconds before the end"), ("20", "20 seconds before the end"), ("30", "30 seconds before the end")]),
+        &p.up_next_seconds.to_string(), |id| prefs::update(|p| p.up_next_seconds = id.parse().unwrap_or(10)));
+    g.add(&row);
     let (row, _) = widgets::choice_row(
         "Poster size",
         "Resize movie and show cards throughout Theater.",

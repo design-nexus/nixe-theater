@@ -1292,7 +1292,12 @@ pub fn up_next(finished: &MediaItem) {
     if prefs::get().autoplay_next
         && let Some(next) = next_episode(finished)
     {
-        crate::window::show_up_next(next);
+        if crate::window::up_next_dismissed() { return; }
+        if prefs::get().up_next_seconds == 0 {
+            play_queued(&next);
+        } else {
+            crate::window::show_up_next(next);
+        }
     }
 }
 
