@@ -7,9 +7,9 @@ license.workspace = true
 
 [dependencies]
 nyx-core = { git = "https://github.com/design-nexus/nyx-core.git", rev = "52cba5e27a3dd5f00c780f53e423302b4b5f9c9c" }
-nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "144e77df1b6561fd8d0667e0d58306696c3e4d63" }
-nyx-ui = { git = "https://github.com/design-nexus/nyx-design.git", rev = "144e77df1b6561fd8d0667e0d58306696c3e4d63" }
-nyx-playback = { git = "https://github.com/design-nexus/nyx-design.git", rev = "144e77df1b6561fd8d0667e0d58306696c3e4d63" }
+nyx-theme = { git = "https://github.com/design-nexus/nyx-design.git", rev = "5c4172947c18876c05d3173d2ebe2a1e434b098b" }
+nyx-ui = { git = "https://github.com/design-nexus/nyx-design.git", rev = "5c4172947c18876c05d3173d2ebe2a1e434b098b" }
+nyx-playback = { git = "https://github.com/design-nexus/nyx-design.git", rev = "5c4172947c18876c05d3173d2ebe2a1e434b098b" }
 nyx-media-model = { path = "../../crates/nyx-media-model" }
 nyx-media-cache = { path = "../../crates/nyx-media-cache" }
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }

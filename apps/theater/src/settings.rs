@@ -1,10 +1,10 @@
 use crate::{
-    prefs, theme,
+    prefs,
     widgets::{self, Page},
     window,
 };
 use gtk::{glib, prelude::*};
-use nyx_ui::settings_card::{self, Spec};
+use nyx_ui::settings_card::{self, About, Spec, Standard};
 
 pub fn open() {
     let (Some(overlay), Some(window)) = (window::overlay(), window::window()) else { return };
@@ -17,10 +17,28 @@ pub fn open() {
             groups: &[
                 ("Servers", "network-server-symbolic", "Connections and watch state"),
                 ("Metadata", "dialog-information-symbolic", "Ratings, credits and recommendations"),
-                ("Theater window", "applications-graphics-symbolic", "Theme, accent, motion"),
-                ("Keyboard", "input-keyboard-symbolic", "Shortcuts"),
+                ("Viewing", "video-display-symbolic", "Starting view, seeking, posters"),
             ],
             search_text: None,
+            standard: Some(Standard {
+                app: "theater",
+                about: About {
+                    name: "Theater",
+                    icon: "io.github.design_nexus.nyx.Theater",
+                    version: env!("CARGO_PKG_VERSION"),
+                    description: "Your Plex and Jellyfin libraries in one place.",
+                    licence: env!("CARGO_PKG_LICENSE"),
+                    website: "https://github.com/design-nexus/nyx-theater",
+                    issues: "https://github.com/design-nexus/nyx-theater/issues",
+                    credits: &[("mpv", "playback")],
+                },
+                shortcuts: window::SHORTCUTS,
+                reduce_motion: || prefs::get().reduce_motion,
+                set_reduce_motion: |on| {
+                    prefs::update(|p| p.reduce_motion = on);
+                    window::update_motion();
+                },
+            }),
         },
         page.root.upcast_ref(),
         &page.body,
@@ -159,10 +177,10 @@ fn build(page: &Page) {
     });
     servers.add(&row);
     metadata_settings(page);
-    // ----- Theater window -----
-    let g = page.group("Theater window");
+    // ----- Viewing -----
+    let g = page.group("Viewing");
     let (row, _) = widgets::choice_row(
-        "Open on",
+        "Starting view",
         "Always start at Home, or restore your last library view and its filters.",
         widgets::opts(&[("home", "Home"), ("last", "Last view")]),
         if p.restore_view { "last" } else { "home" },
@@ -196,85 +214,6 @@ fn build(page: &Page) {
         },
     );
     g.add(&row);
-    let app_themes = theme::all();
-    let options: Vec<(String, String)> = app_themes.iter().map(|t| (t.id.clone(), t.name.clone())).collect();
-    let (theme_row, theme_dd) = widgets::choice_row(
-        "Theme",
-        "Dracula, Catppuccin, Tokyo Night, One Dark Pro and more. Add your own in <tt>~/.config/nyx-theater/themes</tt>.",
-        options,
-        &p.theme,
-        |id| {
-            prefs::update(|p| {
-                p.theme = id;
-                p.mode = prefs::ThemeMode::Theme;
-            });
-            theme::apply();
-        },
-    );
-    theme_dd.set_sensitive(p.mode == prefs::ThemeMode::Theme || !theme::omarchy_available());
-    if theme::omarchy_available() {
-        let dd = theme_dd.clone();
-        let (r, _) = widgets::switch_row(
-            "Follow Omarchy theme",
-            "Match the desktop's colors and update live whenever the Omarchy theme changes.",
-            p.mode == prefs::ThemeMode::Omarchy,
-            move |on| {
-                prefs::update(|p| p.mode = if on { prefs::ThemeMode::Omarchy } else { prefs::ThemeMode::Theme });
-                dd.set_sensitive(!on);
-                theme::apply();
-            },
-        );
-        g.add(&r);
-    }
-    g.add(&theme_row);
-
-    let swatches = widgets::hbox(4);
-    let refresh_swatches = {
-        let swatches = swatches.clone();
-        move || {
-            while let Some(c) = swatches.first_child() {
-                swatches.remove(&c);
-            }
-            let pal = theme::current_palette();
-            for c in [&pal.bg, &pal.surface, &pal.muted, &pal.text, &pal.accent, &pal.danger] {
-                let s = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-                s.add_css_class("swatch");
-                let provider = gtk::CssProvider::new();
-                provider.load_from_string(&format!("box {{ background: {c}; }}"));
-                #[allow(deprecated)]
-                s.style_context().add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_USER);
-                swatches.append(&s);
-            }
-        }
-    };
-    refresh_swatches();
-    let last = std::cell::RefCell::new(theme::current_palette());
-    let weak = swatches.downgrade();
-    glib::timeout_add_seconds_local(1, move || {
-        if weak.upgrade().is_none() {
-            return glib::ControlFlow::Break;
-        }
-        let now = theme::current_palette();
-        if *last.borrow() != now {
-            *last.borrow_mut() = now;
-            refresh_swatches();
-        }
-        glib::ControlFlow::Continue
-    });
-    g.add(&widgets::row("Current colors", "", Some(swatches.upcast_ref())));
-    g.add(&nyx_ui::widgets::accent_row("theater"));
-    let (r, _) =
-        widgets::switch_row("Reduce motion", "Turn off transitions and animations in this window.", p.reduce_motion, |on| {
-            prefs::update(|p| p.reduce_motion = on);
-            theme::apply();
-            window::update_motion();
-        });
-    g.add(&r);
-
-    let g = page.group("Keyboard");
-    for (keys, action) in window::SHORTCUTS {
-        g.add(&widgets::row(action, "", Some(widgets::key_caps(keys).upcast_ref())));
-    }
 }
 
 fn metadata_settings(page: &Page) {
