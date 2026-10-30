@@ -312,6 +312,7 @@ fn metadata_settings(page: &Page) {
 fn metadata_credentials(provider: &'static str) {
     let title = if provider == "tmdb" { "TMDB" } else { "MDBList" };
     let (dialog, body) = widgets::dialog(&format!("{title} metadata"), 480);
+    crate::dialog_dismissal::add(&dialog, &body, "Cancel");
     let label = widgets::label(
         if provider == "tmdb" {
             "Enter your API Read Access Token (Bearer token) from TMDB settings."

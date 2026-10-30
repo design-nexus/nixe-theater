@@ -1,3 +1,4 @@
+mod dialog_dismissal;
 mod artwork;
 mod browse;
 mod browse_ui;

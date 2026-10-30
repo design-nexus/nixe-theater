@@ -584,6 +584,7 @@ fn saved(page: &str) {
     let page = page.to_owned();
     nyx_core::cmd::background(crate::metadata::saved_views, move |result| {
         let (dialog, body) = widgets::dialog("Saved library views", 480);
+        crate::dialog_dismissal::add(&dialog, &body, "Cancel");
         let name = gtk::Entry::new();
         name.set_placeholder_text(Some("Name this view"));
         name.set_max_length(100);
